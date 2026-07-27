@@ -232,7 +232,13 @@ def _text_svg(sh, L, T, Wd, Ht, P, dpi):
             lines.append((cur, fs, bold, pfam, col, algn, ind, sb))
             sb = 0
 
-    total = sum((f * 1.30 + s) for _t, f, _b, _fa, _c, _a, _i, s in lines)
+    # 줄 높이는 글꼴이 정한다(ascent+descent). 1.3 같은 어림값을 쓰면
+    # 세로 가운데 맞춤이 그만큼 어긋나 멀쩡한 변환이 틀린 것처럼 보인다.
+    def _lh(fam, bold, fs):
+        _, a, d = _metric(fam, bold)
+        return (a + d) * fs
+
+    total = sum(_lh(fa, b, f) + s for _t, f, b, fa, _c, _a, _i, s in lines)
     y0 = T / EMU_PER_IN * dpi + mT / EMU_PER_IN * dpi
     if anch in ("ctr", "b"):
         box_h_px = Ht / EMU_PER_IN * dpi
@@ -250,7 +256,7 @@ def _text_svg(sh, L, T, Wd, Ht, P, dpi):
                        f'text-anchor="{algn}" font-family="{fam}" '
                        f'font-size="{fs_px:.2f}" font-weight="{700 if bold else 400}" '
                        f'fill="{_hex(col) if col else "#111111"}">{esc}</text>')
-        y += fs_px * 1.30
+        y += _lh(fam, bold, fs) / 72.0 * dpi
     return out
 
 
