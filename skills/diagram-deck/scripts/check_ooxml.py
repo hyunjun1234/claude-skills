@@ -30,7 +30,9 @@ ORDER = {
     f"{{{P}}}spPr": [("xfrm",), ("custGeom", "prstGeom"),
                      ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill"),
                      ("ln",), ("effectLst", "effectDag"), ("scene3d",), ("sp3d",), ("extLst",)],
-    f"{{{A}}}xfrm": [("off",), ("ext",)],
+    # spPr 안에서는 CT_Transform2D(off, ext), grpSpPr 안에서는
+    # CT_GroupTransform2D(off, ext, chOff, chExt) 다. 순서는 이 순서로 강제된다.
+    f"{{{A}}}xfrm": [("off",), ("ext",), ("chOff",), ("chExt",)],
     f"{{{A}}}p": [("pPr",), ("r", "br", "fld"), ("endParaRPr",)],
     f"{{{P}}}txBody": [("bodyPr",), ("lstStyle",), ("p",)],
     f"{{{A}}}txBody": [("bodyPr",), ("lstStyle",), ("p",)],

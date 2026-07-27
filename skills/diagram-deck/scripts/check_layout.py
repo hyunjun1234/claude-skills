@@ -18,6 +18,36 @@ def vlen(s):
     return sum(2 if ord(c) > 0x2E80 else 1 for c in s)
 
 
+def _real_width(seg, fs, name, bold, ea=None):
+    """실제 글꼴로 잰 폭(pt). 못 재면 None.
+
+    반각 어림짐작은 영문 라벨에서 10% 넘게 틀려 헛경고를 만든다.
+    도해 안 라벨은 폭에 딱 맞춰 상자를 잡으므로 정확히 재야 한다.
+    한글은 `a:ea` 글꼴로 그려지므로 그 이름으로 재야 한다.
+    """
+    try:
+        import os
+        import sys as _s
+        _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from svg2shapes import measure
+        return measure(seg, fs, name or "맑은 고딕", bold, ea)
+    except Exception:
+        return None
+
+
+def _ea_of(p):
+    """문단 첫 run 의 East-Asian 타이프페이스."""
+    from pptx.oxml.ns import qn
+    for r in p.runs:
+        rPr = r._r.find(qn("a:rPr"))
+        if rPr is None:
+            continue
+        e = rPr.find(qn("a:ea"))
+        if e is not None and e.get("typeface"):
+            return e.get("typeface")
+    return None
+
+
 def est_size(shape):
     """(필요한 높이 pt, 가장 긴 줄의 폭 pt) 추정."""
     tf = shape.text_frame
@@ -32,11 +62,16 @@ def est_size(shape):
         fs = max(sizes) if sizes else 18.0
         mono = any((r.font.name or "") == "Consolas" for r in p.runs)
         per = fs * (0.55 if mono else 0.5)      # 반각 1칸의 폭
+        fname = next((r.font.name for r in p.runs if r.font.name), None)
+        fbold = any(bool(r.font.bold) for r in p.runs)
+        fea = _ea_of(p)
         # p.text 는 <a:br/> 를 '\v' 로 준다 — 강제 줄바꿈으로 센다
         segs = (p.text or "").split("\v")
         lines = 0
         for seg in segs:
-            line_w = vlen(seg) * per
+            line_w = _real_width(seg, fs, fname, fbold, fea) if seg else 0
+            if line_w is None:
+                line_w = vlen(seg) * per
             max_w = max(max_w, line_w)
             lines += max(1, int(line_w / w_pt) + (1 if line_w % w_pt else 0)) if seg else 1
         ls = p.line_spacing if isinstance(p.line_spacing, float) else 1.2
@@ -49,16 +84,27 @@ def est_size(shape):
 
 
 def boxes(slide):
+    """그룹 **안쪽까지** 훑는다.
+
+    도해를 네이티브 도형 그룹으로 넣으면 슬라이드 최상위에는 그룹 하나만 보인다.
+    그룹을 안 열면 도해 슬라이드는 사실상 무검사가 된다.
+    """
     out = []
-    for sh in slide.shapes:
-        if sh.left is None or sh.top is None:
-            continue
-        txt = sh.text_frame.text.strip() if sh.has_text_frame else ""
-        out.append({
-            "sh": sh, "txt": txt,
-            "l": sh.left, "t": sh.top,
-            "r": sh.left + (sh.width or 0), "b": sh.top + (sh.height or 0),
-        })
+
+    def walk(container, depth=0):
+        for sh in container:
+            if sh.shape_type == 6 and depth < 4:        # GROUP
+                walk(sh.shapes, depth + 1)
+                continue
+            if sh.left is None or sh.top is None:
+                continue
+            txt = sh.text_frame.text.strip() if sh.has_text_frame else ""
+            out.append({
+                "sh": sh, "txt": txt, "in_group": depth > 0,
+                "l": sh.left, "t": sh.top,
+                "r": sh.left + (sh.width or 0), "b": sh.top + (sh.height or 0),
+            })
+    walk(slide.shapes)
     return out
 
 

@@ -66,6 +66,30 @@ for s in p.slides:
 print(f"   그림 {n}개 중 왜곡 {bad}개")
 sys.exit(1 if bad else 0)
 EOF
+
+    hr; echo "6) 네이티브 도해 그룹 (경계가 그림에 맞는가)"
+    "$PY" - "$F" "$D" <<'EOF' || FAIL=$((FAIL+1))
+import sys
+sys.path.insert(0, sys.argv[2])
+from pptx import Presentation
+from check_shapes import check_group_tight
+p = Presentation(sys.argv[1]); n = bad = kids = 0
+for i, s in enumerate(p.slides, 1):
+    for sh in s.shapes:
+        if sh.shape_type != 6:          # GROUP
+            continue
+        n += 1
+        kids += len(list(sh.shapes))
+        m = check_group_tight(sh)
+        if m:
+            bad += 1
+            print(f"   ❌ p{i} {sh.name}: {m}")
+if n == 0:
+    print("   네이티브 도해 없음 (건너뜀)")
+else:
+    print(f"   그룹 {n}개 · 자식 도형 {kids}개 · 경계 어긋남 {bad}개")
+sys.exit(1 if bad else 0)
+EOF
     ;;
   *.pdf)
     hr; echo "1) 쪽수 · 글꼴 임베드 · 한글 검색"
