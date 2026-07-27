@@ -4,7 +4,7 @@ Claude Code 스킬 모음. 한 곳에서 관리하고 여러 기계에 심볼릭
 
 | 스킬 | 하는 일 |
 |---|---|
-| [`diagram-deck`](skills/diagram-deck/) | HTML/SVG 로 도해를 그려 **PPTX·PDF** 를 만든다. HTML→PDF, PDF→PPTX 변환. 검증 루프 포함 |
+| [`diagram-deck`](skills/diagram-deck/) | HTML/SVG 로 도해를 그려 슬라이드를 만든다. 변환은 **`HTML → PPTX`** 와 **`PDF → PPTX`** 두 갈래(중간 PDF 파일 없음). 검증 루프 포함 |
 | [`diagram-deck-upgrade`](skills/diagram-deck-upgrade/) | 그림 수정 요청을 받으면 고치고, **그 교훈을 `diagram-deck` 에 영구히 반영**한다 |
 
 ## 설치
@@ -42,6 +42,16 @@ Cowork/클라우드 세션은 내 기계의 `~/.claude/skills/` 를 읽지 않�
    ```
 2. **플러그인으로 선언하기** — 저장소의 `.claude/settings.json` 에 이 저장소를 플러그인으로 적으면
    세션 시작 때 설치된다. 이 저장소에는 `.claude-plugin/plugin.json` 이 들어 있다.
+
+## 변환은 두 갈래뿐이다
+
+```bash
+PY=~/.cache/diagram-deck/venv/bin/python
+$PY ~/.claude/skills/diagram-deck/scripts/html2pptx.py in.html out.pptx
+$PY ~/.claude/skills/diagram-deck/scripts/pdf2pptx.py  in.pdf  out.pptx
+```
+
+`HTML → PPTX` 는 중간 PDF 파일을 만들지 않는다. PDF 도 함께 원하면 `--keep-pdf x.pdf`.
 
 ## 스킬이 스스로 자라는 방식
 
