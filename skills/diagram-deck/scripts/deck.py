@@ -208,22 +208,29 @@ class Deck:
     def _new(self):
         return self.prs.slides.add_slide(self.blank)
 
-    def _chrome(self, s, title, subtitle=None):
-        """상단 제목 + 밑줄 + 하단 푸터/쪽번호."""
+    def _chrome(self, s, title, subtitle=None, tight=False):
+        """상단 제목 + 밑줄 + 하단 푸터/쪽번호.
+
+        tight=True 는 도해 슬라이드용. 제목 영역을 0.3in 줄여 그림에 넘긴다 —
+        도해는 폭이 넓을수록 안쪽 글자가 커지므로 세로 공간이 곧 가독성이다.
+        """
         self._cur_title = title
         rect(s, 0, 0, Inches(0.16), SH, fill=ACCENT)
         if self.part:
-            tf = tbox(s, ML, Inches(0.30), BODY_W, Inches(0.26))
+            tf = tbox(s, ML, Inches(0.30 if not tight else 0.24), BODY_W, Inches(0.26))
             para(tf, True, self.part, 11.5, True, ACCENT)
-        ty = TITLE_Y + (Inches(0.22) if self.part else 0)
+        ty = (TITLE_Y if not tight else Inches(0.34)) + \
+            (Inches(0.22 if not tight else 0.18) if self.part else 0)
         tsize = 30 if vlen(title) <= 46 else (26 if vlen(title) <= 64 else 22)
-        tf = tbox(s, ML, ty, BODY_W, Inches(0.78))
+        if tight:
+            tsize = min(tsize, 24)
+        tf = tbox(s, ML, ty, BODY_W, Inches(0.78 if not tight else 0.52))
         para(tf, True, title, tsize, True, INK)
-        sy = ty + Inches(0.72)
+        sy = ty + Inches(0.72 if not tight else 0.50)
         if subtitle:
             tf = tbox(s, ML, sy, BODY_W, Inches(0.3))
-            para(tf, True, subtitle, 14, False, MUTED)
-            sy += Inches(0.34)
+            para(tf, True, subtitle, 14 if not tight else 12.5, False, MUTED)
+            sy += Inches(0.34 if not tight else 0.28)
         hline(s, ML, sy + Inches(0.06), BODY_W, LINE, 1.25)
         self.n += 1
         tf = tbox(s, ML, SH - Inches(0.44), BODY_W - Inches(1.5), Inches(0.24))
@@ -291,6 +298,20 @@ class Deck:
             if total <= h_pt:
                 return s, total / h_pt
         return sizes[-1], total / h_pt
+
+    @staticmethod
+    def _needed_pt(items, width_emu, size):
+        """이 글자 크기로 넣으면 세로로 몇 pt 가 필요한가."""
+        w_pt = width_emu / 12700.0
+        total = 0.0
+        for it in items:
+            lv = it.get("lv", 0) or 0
+            avail = w_pt - lv * 0.30 * 72 - 14
+            per = max(10.0, avail / (size * 0.5))
+            lines = max(1, math.ceil(vlen(it["t"]) / per))
+            fs = size if lv == 0 else size - 1.2
+            total += lines * fs * 1.30 + (7 if lv == 0 else 3)
+        return total
 
     def _bullets(self, s, items, x, y, w, h, size=None):
         if not items:
@@ -520,6 +541,81 @@ class Deck:
         self._callout(s, callout)
         self._note(s, note)
         return s
+
+    def _bullets_cols(self, s, items, x, y, w, h, cols=2, gap=Inches(0.34)):
+        """설명을 여러 단으로 나눠 넣는다. 그림 아래 얕은 띠에 쓴다."""
+        if not items:
+            return
+        if cols <= 1 or len(items) < 3:
+            return self._bullets(s, items, x, y, w, h)
+        # lv==0 을 기준으로 끊어야 하위 항목이 부모와 떨어지지 않는다
+        groups, cur = [], []
+        for it in items:
+            if (it.get("lv", 0) or 0) == 0 and cur:
+                groups.append(cur)
+                cur = []
+            cur.append(it)
+        if cur:
+            groups.append(cur)
+        weight = [sum(max(1, vlen(i["t"]) / 46.0) for i in g) for g in groups]
+        target = sum(weight) / cols
+        cw = (w - gap * (cols - 1)) / cols
+        col, acc = [], 0.0
+        placed = 0
+        size = self._fit(items, int(cw), int(h))[0]
+        worst = 0.0
+        chunks = []
+        for g, wt in zip(groups, weight):
+            if acc + wt > target * 1.06 and col and placed < cols - 1:
+                chunks.append(col)
+                placed += 1
+                col, acc = [], 0.0
+            col.extend(g)
+            acc += wt
+        if col:
+            chunks.append(col)
+        for i, ch in enumerate(chunks):
+            self._bullets(s, ch, E(x + i * (cw + gap)), y, E(cw), h, size=size)
+            worst = max(worst, self._fit(ch, int(cw), int(h), sizes=(size,))[1])
+        if worst > 1.0:
+            OVERFLOW.append((self.n, self._cur_title, round(worst, 2)))
+
+    def diagram_svg(self, title, svg, items=None, subtitle=None, callout=None,
+                    note=None, dia_h=Inches(4.60), cols=2, name=None):
+        """SVG 도해를 **네이티브 도형 그룹**으로 넣는다(PNG 아님).
+
+        상자·화살표·글자가 각각 PowerPoint 도형이라 그대로 편집할 수 있다.
+        그림은 위에 폭 가득, 설명은 아래 띠에 여러 단으로 놓는다 —
+        옆에 놓으면 그림 폭이 반으로 줄어 안쪽 글자가 5pt 까지 작아진다.
+        """
+        import sys as _sys
+        import os as _os
+        _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        from svg2shapes import add_svg_shapes
+
+        s = self._new()
+        top = self._chrome(s, title, subtitle, tight=True)
+        avail = BODY_BOT - top - (Inches(0.70) if callout else 0)
+        # 설명이 실제로 차지할 높이만큼만 떼어 주고 나머지는 전부 그림에 준다.
+        # 고정 비율로 나누면 설명이 짧은 장에서 그림이 공연히 작아진다.
+        gap = Inches(0.34)
+        cw = (BODY_W - gap * (cols - 1)) / cols
+        if items:
+            need = Inches(self._needed_pt(items, int(cw), 10.0) / cols / 72.0)
+            need = max(Inches(0.80), min(need + Inches(0.10), Inches(2.05)))
+        else:
+            need = 0
+        dh = max(Inches(3.10), min(dia_h, avail - need - Inches(0.10)))
+        g, gw, gh, n, minpt = add_svg_shapes(s.shapes, svg, E(ML), E(top),
+                                             width=E(BODY_W), height=E(dh))
+        g.name = name or "도해"
+        if items:
+            by = top + dh + Inches(0.12)
+            self._bullets_cols(s, items, ML, by, BODY_W, BODY_BOT - by -
+                               (Inches(0.70) if callout else 0), cols=cols, gap=gap)
+        self._callout(s, callout)
+        self._note(s, note)
+        return s, n, minpt, (gw, gh)
 
     def save(self, path):
         self.prs.save(path)

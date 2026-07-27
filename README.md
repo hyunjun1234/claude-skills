@@ -4,8 +4,21 @@ Claude Code 스킬 모음. 한 곳에서 관리하고 여러 기계에 심볼릭
 
 | 스킬 | 하는 일 |
 |---|---|
-| [`diagram-deck`](skills/diagram-deck/) | HTML/SVG 로 도해를 그려 슬라이드를 만든다. 변환은 **`HTML → PPTX`** 와 **`PDF → PPTX`** 두 갈래(중간 PDF 파일 없음). 검증 루프 포함 |
+| [`diagram-deck`](skills/diagram-deck/) | SVG 로 도해를 그려 **PowerPoint 네이티브 도형**으로 슬라이드에 넣는다(상자·화살표·글자를 그대로 편집 가능). 문서 변환은 **`HTML → PPTX`** 와 **`PDF → PPTX`** 두 갈래(중간 PDF 파일 없음). 검증 루프 포함 |
 | [`diagram-deck-upgrade`](skills/diagram-deck-upgrade/) | 그림 수정 요청을 받으면 고치고, **그 교훈을 `diagram-deck` 에 영구히 반영**한다 |
+
+## 도해는 그림 파일이 아니라 도형으로 들어간다
+
+```python
+from svg2shapes import add_svg_shapes
+g, w, h, n, min_pt = add_svg_shapes(slide.shapes, svg, left, top, width=W, height=H)
+```
+
+`<rect>` → 사각형, `<circle>` → 타원, `<line>` → 직선, `<polygon>` → 자유형, `<text>` → 글상자.
+전체는 그룹 하나로 묶인다(옮길 땐 그룹째, 고칠 땐 안으로 들어가 개별 편집).
+그룹 경계 = 자식 경계라서 선택 박스가 그림에 딱 맞는다.
+
+검증은 **pptx 안 도형을 다시 SVG 로 되돌려 원본과 픽셀 비교**한다 — `scripts/check_shapes.py`.
 
 ## 설치
 
