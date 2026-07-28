@@ -55,24 +55,33 @@ if [ "$MODE" = "personal" ] && [ "${NO_HOOKS:-0}" != "1" ]; then
     else
       cp "$S" "$S.bak.$(date +%Y%m%d%H%M%S)"
       # 스크립트가 없으면 조용히 통과하도록 감싼다(pull 전이어도 안전)
-      w() { printf 'f="$HOME/claude-skills/hooks/%s"; if [ -x "$f" ]; then exec "$f"; else cat >/dev/null; fi' "$1"; }
+      # 저장소의 **실제 경로**를 박는다. $HOME/claude-skills 로 하드코딩하면
+      # 다른 경로에 clone 한 사람에게는 훅이 조용한 no-op 이 된다.
+      w() { printf 'f="%s/hooks/%s"; if [ -x "$f" ]; then exec "$f"; else cat >/dev/null; fi' "$REPO" "$1"; }
       tmp="$(mktemp)"
       jq --arg detect "$(w dd_detect.sh)" \
          --arg guard  "$(w dd_guard.sh)" \
-         --arg sync   "$(w dd_sync.sh)" '
-        def strip($ev; $tag):
+         --arg sync   "$(w dd_sync.sh)" \
+         --arg art    "$(w dd_artifact.sh)" '
+        # 우리가 넣은 것만 걷어내고 다시 넣는다 — 여러 번 돌려도 중복되지 않고,
+        # 사용자가 따로 넣어 둔 훅은 건드리지 않는다.
+        def strip($ev; $tags):
           (.hooks[$ev] // [])
-          | map(.hooks |= map(select((.command // "") | contains($tag) | not)))
+          | map(.hooks |= map(select([ .command // "" | contains($tags[])] | any | not)))
           | map(select((.hooks | length) > 0));
         .hooks //= {}
-        | .hooks.UserPromptSubmit = (strip("UserPromptSubmit"; "dd_detect.sh")
+        | .hooks.UserPromptSubmit = (strip("UserPromptSubmit"; ["dd_detect.sh"])
             + [{hooks: [{type: "command", command: $detect, timeout: 10}]}])
-        | .hooks.Stop = (strip("Stop"; "dd_guard.sh") | map(.hooks |= map(select((.command // "") | contains("dd_sync.sh") | not))) | map(select((.hooks|length) > 0))
+        | .hooks.PostToolUse = (strip("PostToolUse"; ["dd_artifact.sh"])
+            + [{matcher: "Write|Edit|Bash|NotebookEdit",
+                hooks: [{type: "command", command: $art, timeout: 10, async: true}]}])
+        | .hooks.Stop = (strip("Stop"; ["dd_guard.sh", "dd_sync.sh"])
             + [{hooks: [
                 {type: "command", command: $guard, timeout: 20},
                 {type: "command", command: $sync,  timeout: 60, async: true}
               ]}])
-      ' "$S" > "$tmp" && mv "$tmp" "$S" && echo "훅 등록: UserPromptSubmit(감지) · Stop(교훈 강제 + 자동 커밋·푸시)"
+      ' "$S" > "$tmp" && mv "$tmp" "$S" \
+        && echo "훅 등록: UserPromptSubmit(감지) · PostToolUse(산출물 표시) · Stop(교훈 강제 + 자동 커밋·푸시)"
     fi
   fi
 fi

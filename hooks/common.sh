@@ -2,6 +2,9 @@
 # diagram-deck 자동 업그레이드 훅 공용 함수.
 # 훅은 사용자의 모든 프롬프트·모든 세션에서 돈다. 관계없는 경우 빨리 조용히 끝내는 것이 제1 원칙이다.
 
+# HOME 이 없는 환경에서 set -u 로 죽지 않게 한다
+: "${HOME:=$(cd ~ 2>/dev/null && pwd || echo /tmp)}"
+export HOME
 DD_STATE="${DD_STATE:-$HOME/.cache/diagram-deck/state}"
 
 dd_repo() {
@@ -33,7 +36,17 @@ dd_lessons() {
     printf '%s/skills/diagram-deck/LESSONS.md' "$(dd_repo)"
 }
 
+dd_fingerprint() {
+    # LESSONS.md 의 내용 지문. git 이 없어도, 원래부터 더러웠어도 정확히 판정하려면
+    # "요청을 받은 그 순간의 내용"과 비교해야 한다. cksum 은 어디에나 있다.
+    local f
+    f=$(dd_lessons)
+    [ -f "$f" ] || { printf 'none'; return; }
+    cksum "$f" 2>/dev/null | awk '{print $1 "-" $2}' || printf 'err'
+}
+
 dd_log() {
-    mkdir -p "$DD_STATE" 2>/dev/null || true
-    printf '%s %s\n' "$(date -Is)" "$*" >> "$DD_STATE/hooks.log" 2>/dev/null || true
+    # 리다이렉션 실패는 `cmd >f 2>/dev/null` 로 못 막는다 — >f 가 먼저 평가된다.
+    # 서브셸로 감싸야 조용해진다. 훅이 사용자 터미널에 잡음을 내면 안 된다.
+    ( mkdir -p "$DD_STATE" && printf '%s %s\n' "$(date -Is)" "$*" >> "$DD_STATE/hooks.log" ) 2>/dev/null || true
 }
