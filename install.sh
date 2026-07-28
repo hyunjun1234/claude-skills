@@ -24,18 +24,24 @@ mkdir -p "$DEST"
 for d in "$REPO"/skills/*/; do
   name="$(basename "$d")"
   link="$DEST/$name"
-  if [ -L "$link" ]; then
-    rm "$link"
-  elif [ -e "$link" ]; then
+  if [ -e "$link" ] && [ ! -L "$link" ]; then
     echo "⚠ 이미 있음(링크 아님): $link — 건너뛴다"
     continue
   fi
   if [ "$MODE" = "personal" ]; then
-    ln -s "$d" "$link"
-    echo "링크: $link -> $d"
+    # **원자적으로 교체한다.** rm 뒤에 ln -s 하면 그 사이에 스킬이 없는 순간이 생기고,
+    # Claude Code 의 감시자가 하필 그때를 보면 그 스킬이 목록에서 사라진다(실제로 겪었다).
+    tmp="$DEST/.tmp-$name.$$"
+    ln -sfn "${d%/}" "$tmp"
+    mv -T "$tmp" "$link" 2>/dev/null || { rm -f "$tmp"; ln -sfn "${d%/}" "$link"; }
+    echo "링크: $link -> ${d%/}"
   else
     # 프로젝트에 커밋할 것이므로 실제 복사한다(다른 사람 기계엔 이 저장소가 없다)
-    cp -r "$d" "$link"
+    tmp="$DEST/.tmp-$name.$$"
+    rm -rf "$tmp"
+    cp -r "$d" "$tmp"
+    rm -rf "$link"
+    mv "$tmp" "$link"
     echo "복사: $link"
   fi
 done
