@@ -40,6 +40,43 @@ for d in "$REPO"/skills/*/; do
   fi
 done
 
+chmod +x "$REPO"/hooks/*.sh 2>/dev/null || true
+
+# ── 자동 업그레이드 훅 등록 (개인 설치일 때만) ─────────────────────────────
+# 스킬을 "부르면 도는" 것에서 "안 부르면 하니스가 부르는" 것으로 바꾼다.
+if [ "$MODE" = "personal" ] && [ "${NO_HOOKS:-0}" != "1" ]; then
+  S="$HOME/.claude/settings.json"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "⚠ jq 가 없어 훅 등록을 건너뛴다. jq 설치 후 다시 돌려라."
+  else
+    [ -f "$S" ] || echo '{}' > "$S"
+    if ! jq -e . "$S" >/dev/null 2>&1; then
+      echo "⚠ $S 가 깨진 JSON 이다. 훅 등록을 건너뛴다 — 먼저 고쳐라."
+    else
+      cp "$S" "$S.bak.$(date +%Y%m%d%H%M%S)"
+      # 스크립트가 없으면 조용히 통과하도록 감싼다(pull 전이어도 안전)
+      w() { printf 'f="$HOME/claude-skills/hooks/%s"; if [ -x "$f" ]; then exec "$f"; else cat >/dev/null; fi' "$1"; }
+      tmp="$(mktemp)"
+      jq --arg detect "$(w dd_detect.sh)" \
+         --arg guard  "$(w dd_guard.sh)" \
+         --arg sync   "$(w dd_sync.sh)" '
+        def strip($ev; $tag):
+          (.hooks[$ev] // [])
+          | map(.hooks |= map(select((.command // "") | contains($tag) | not)))
+          | map(select((.hooks | length) > 0));
+        .hooks //= {}
+        | .hooks.UserPromptSubmit = (strip("UserPromptSubmit"; "dd_detect.sh")
+            + [{hooks: [{type: "command", command: $detect, timeout: 10}]}])
+        | .hooks.Stop = (strip("Stop"; "dd_guard.sh") | map(.hooks |= map(select((.command // "") | contains("dd_sync.sh") | not))) | map(select((.hooks|length) > 0))
+            + [{hooks: [
+                {type: "command", command: $guard, timeout: 20},
+                {type: "command", command: $sync,  timeout: 60, async: true}
+              ]}])
+      ' "$S" > "$tmp" && mv "$tmp" "$S" && echo "훅 등록: UserPromptSubmit(감지) · Stop(교훈 강제 + 자동 커밋·푸시)"
+    fi
+  fi
+fi
+
 echo
 bash "$REPO/skills/diagram-deck/scripts/setup_env.sh" || true
 
@@ -48,6 +85,8 @@ echo "설치 완료 ($MODE)."
 if [ "$MODE" = "personal" ]; then
   echo "  Claude Code 를 새로 켜면 /diagram-deck, /diagram-deck-upgrade 가 잡힌다."
   echo "  (스킬 디렉터리가 없던 상태에서 새로 만든 경우에만 재시작이 필요하다)"
+  echo "  훅을 끄려면: touch $REPO/.no-autosync (자동 푸시만) 또는 /hooks 에서 해제"
 else
   echo "  $TARGET_REPO 에서 git add .claude/skills && commit 하면 클라우드 세션에서도 쓰인다."
+  echo "  (훅은 개인 설치에서만 등록된다. NO_HOOKS=1 로 끌 수 있다)"
 fi

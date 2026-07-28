@@ -66,12 +66,27 @@ $PY ~/.claude/skills/diagram-deck/scripts/pdf2pptx.py  in.pdf  out.pptx
 
 `HTML → PPTX` 는 중간 PDF 파일을 만들지 않는다. PDF 도 함께 원하면 `--keep-pdf x.pdf`.
 
-## 스킬이 스스로 자라는 방식
+## 스킬이 스스로 자라는 방식 — 훅이 강제한다
+
+기억에 의존하면 자동이 아니다. 그래서 하니스가 강제한다. `install.sh` 가 훅 3개를
+`~/.claude/settings.json` 에 등록한다(개인 설치일 때만, `NO_HOOKS=1` 로 끌 수 있다).
+
+| 훅 | 시점 | 하는 일 |
+|---|---|---|
+| `hooks/dd_detect.sh` | UserPromptSubmit | 그림·발표자료 **수정 요청**을 알아채고 `diagram-deck-upgrade` 로 보낸다 |
+| `hooks/dd_guard.sh` | Stop | 교훈을 안 남기고 끝내려 하면 **한 번** 막는다 |
+| `hooks/dd_sync.sh` | Stop (비동기) | 스킬 저장소 변경을 자동으로 커밋·푸시한다 |
+
+그래서 흐름이 이렇게 된다.
 
 1. 그림을 만들 때 `diagram-deck` 이 `LESSONS.md` 를 먼저 읽는다.
-2. 사용자가 수정을 요청하면 `diagram-deck-upgrade` 가 고친 뒤 **교훈을 `LESSONS.md` 에 추가**하고,
-   기계로 잡을 수 있으면 `scripts/check_*.py` 에 검사를 넣는다.
-3. **커밋·푸시까지 한다.** 푸시해야 다른 기계에 반영된다.
+2. 사용자가 "이 그림 이상해" 라고 하면 **훅이** `diagram-deck-upgrade` 를 걸어 준다.
+3. 고친 뒤 교훈을 `LESSONS.md` 에 남기고, 기계로 잡히면 `scripts/check_*.py` 에 검사를 넣는다.
+   안 남기고 끝내려 하면 Stop 훅이 한 번 막는다.
+4. 턴이 끝나면 커밋·푸시가 **자동으로** 된다.
 
 같은 기계의 다른 세션은 파일을 공유하므로 즉시 반영된다.
 다른 기계는 `git pull` 시점에 반영된다.
+
+**끄는 법**: 자동 푸시만 끄려면 저장소에 `.no-autosync` 를 두거나 `DD_AUTOSYNC=0`.
+훅 전체는 `/hooks` 에서 본다. 동작 기록은 `~/.cache/diagram-deck/state/hooks.log`.

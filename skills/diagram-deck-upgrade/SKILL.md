@@ -13,6 +13,23 @@ description: |
 사용자가 그림을 고쳐 달라고 했다. **고치는 것은 절반이다.** 나머지 절반은 같은 지적을
 다시 받지 않도록 규칙으로 만들어 남기는 것이다.
 
+## 0. 이 스킬은 자동으로 걸린다
+
+기억에 의존하면 자동이 아니다. 잊으면 그만이기 때문이다. 그래서 하니스가 강제한다
+(`hooks/` · `install.sh` 가 `~/.claude/settings.json` 에 등록한다).
+
+| 훅 | 시점 | 하는 일 |
+|---|---|---|
+| `dd_detect.sh` | UserPromptSubmit | 프롬프트가 **그림·발표자료 수정 요청**이면 이 스킬을 쓰라는 지시를 넣고, 그 세션을 "교훈 기록 대상"으로 표시한다 |
+| `dd_guard.sh` | Stop | 표시된 세션인데 `LESSONS.md` 에 남은 것이 없으면 **한 번** 막는다 |
+| `dd_sync.sh` | Stop (비동기) | 스킬 저장소 변경을 자동으로 커밋·푸시한다 |
+
+- 오탐이어도 해가 없다. 넣는 지시가 "그림 이야기라면"이라는 **조건부**이고, 차단은 세션당 1회뿐이다.
+- 일회성 요청이라 규칙으로 만들 게 없으면 **왜 일회성인지 한 줄 말하고** 끝내면 통과된다.
+- 자동 푸시를 끄려면 저장소에 `.no-autosync` 를 두거나 `DD_AUTOSYNC=0`.
+- 훅 자체를 보거나 끄려면 `/hooks`.
+- 로그: `~/.cache/diagram-deck/state/hooks.log`
+
 ## 1. 먼저 고친다
 
 1. `diagram-deck` 스킬의 `LESSONS.md` 를 읽는다. **이미 적힌 규칙을 어겨서 생긴 문제인지 먼저 본다.**
@@ -56,14 +73,19 @@ description: |
 
 ## 5. 커밋하고 푸시한다 — 이걸 빠뜨리면 다른 환경에 반영되지 않는다
 
+**턴이 끝나면 `dd_sync.sh` 훅이 알아서 커밋·푸시한다.** 직접 할 필요는 없다.
+직접 하고 싶거나 메시지를 제대로 쓰고 싶으면:
+
 ```bash
 cd ~/claude-skills
-git add -A
+git add skills README.md install.sh hooks
 git commit -m "lessons: <한 줄 요약>"
 git push
 ```
 
 푸시하지 않으면 이 기계 밖에서는 옛 스킬이 그대로 쓰인다.
+훅이 푸시에 실패하면(원격이 앞서 있거나 오프라인) 로그에만 남고 커밋은 로컬에 쌓인다 —
+`~/.cache/diagram-deck/state/hooks.log` 를 보고 `git pull --rebase && git push` 하라.
 
 ## 6. 사용자에게 보고할 것
 
