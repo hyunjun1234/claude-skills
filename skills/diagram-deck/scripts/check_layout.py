@@ -161,6 +161,31 @@ def dup_texts(bs, thr=0.80):
     return hits
 
 
+ABSOLUTES = ("공통", "전부", "모두", "아무도", "뿐", "항상", "그대로",
+             "언제나", "절대", "유일", "전혀", "무조건")
+
+
+def absolutes(bs):
+    """전칭 표현을 뽑는다 — 상세 슬라이드가 붙으면 가장 먼저 거짓이 되는 표현이다(L-19).
+
+    자동 판정은 못 한다. 사람이 눈으로 확인하라고 뽑아 주는 것이다.
+    """
+    hits = []
+    for b in bs:
+        t = b["txt"]
+        if not t:
+            continue
+        # 도해 안 라벨과 '핵심' 한 줄만 본다. 본문 불릿까지 넣으면 잡음이 너무 많아
+        # 아무도 안 읽는다 — 짧게 단정하는 자리가 위험한 자리다.
+        if not b["in_group"] and not t.startswith("핵심"):
+            continue
+        for w in ABSOLUTES:
+            if w in t:
+                hits.append((w, t[:60], "도해" if b["in_group"] else "핵심"))
+                break
+    return hits
+
+
 def overlap(a, b):
     ox = min(a["r"], b["r"]) - max(a["l"], b["l"])
     oy = min(a["b"], b["b"]) - max(a["t"], b["t"])
@@ -224,4 +249,22 @@ def main(path):
     return 1 if bad else 0
 
 
+def report_absolutes(path):
+    """검사가 아니라 검토 보조다. 전칭 표현이 있는 슬라이드를 모아 보여 준다."""
+    prs = Presentation(path)
+    n = 0
+    for i, s_ in enumerate(prs.slides, 1):
+        hits = absolutes(boxes(s_))
+        if not hits:
+            continue
+        print(f"\np{i:3d}")
+        for w, t, where in hits:
+            n += 1
+            print(f"   [{w}] ({where}) {t}")
+    print(f"\n전칭 표현 {n}건 — 상세 슬라이드를 새로 넣었다면 이 문장들을 다시 읽어라(L-19).")
+    return 0
+
+
+if "--absolutes" in sys.argv:
+    sys.exit(report_absolutes(sys.argv[1]))
 sys.exit(main(sys.argv[1]))
