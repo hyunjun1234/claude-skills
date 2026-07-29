@@ -4,8 +4,10 @@
 python-pptx 는 텍스트를 실제로 조판하지 않으므로, 글자 폭/높이를 추정해서 검사한다.
 추정이라 완벽하진 않지만 '명백히 넘치는 것'은 잡는다.
 """
+import re
 import sys
 from collections import defaultdict
+from difflib import SequenceMatcher
 
 from pptx import Presentation
 from pptx.util import Emu
@@ -108,6 +110,57 @@ def boxes(slide):
     return out
 
 
+_PUNCT = re.compile(r"[\s'\"“”‘’·,.…—\-()\[\]:;!?{}=+·]")
+
+
+def _norm(s):
+    return _PUNCT.sub("", s)
+
+
+def _maxpt(sh):
+    m = 0.0
+    if not sh.has_text_frame:
+        return m
+    for p in sh.text_frame.paragraphs:
+        for r in p.runs:
+            if r.font.size:
+                m = max(m, r.font.size.pt)
+    return m
+
+
+def dup_texts(bs, thr=0.80):
+    """도해(그룹) 안 글자가 슬라이드 제목·핵심줄과 같은 말인지 본다.
+
+    도해를 SVG 로 그릴 때 그림 안에 제목을 또 넣거나, 그림 아래 띠의 문장을
+    콜아웃에 그대로 옮겨 적으면 한 슬라이드에 같은 말이 두 번 찍힌다(L-18).
+    """
+    inside = [b for b in bs if b["in_group"] and b["txt"]]
+    if not inside:
+        return []
+    outside = [b for b in bs if not b["in_group"] and b["txt"]]
+    refs = []
+    titles = [(_maxpt(b["sh"]), b["txt"]) for b in outside]
+    titles = [t for t in titles if t[0] >= 18]
+    if titles:
+        refs.append(("제목", max(titles, key=lambda t: t[0])[1]))
+    for b in outside:
+        if b["txt"].startswith("핵심"):
+            refs.append(("핵심", b["txt"][2:].strip()))
+    hits = []
+    for label, ref in refs:
+        rn = _norm(ref)
+        if len(rn) < 8:
+            continue
+        for b in inside:
+            tn = _norm(b["txt"])
+            if len(tn) < 8:
+                continue
+            ratio = SequenceMatcher(None, rn, tn).ratio()
+            if ratio >= thr:
+                hits.append((label, ref[:36], b["txt"][:36], round(ratio, 2)))
+    return hits
+
+
 def overlap(a, b):
     ox = min(a["r"], b["r"]) - max(a["l"], b["l"])
     oy = min(a["b"], b["b"]) - max(a["t"], b["t"])
@@ -121,7 +174,7 @@ def overlap(a, b):
 def main(path):
     prs = Presentation(path)
     W, H = prs.slide_width, prs.slide_height
-    over_h, over_w, collide, outside = [], [], [], []
+    over_h, over_w, collide, outside, dups = [], [], [], [], []
     for i, s in enumerate(prs.slides, 1):
         bs = boxes(s)
         for b in bs:
@@ -146,6 +199,8 @@ def main(path):
                 r = overlap(tb[x], tb[y])
                 if r > 0.55:
                     collide.append((i, tb[x]["txt"][:26], tb[y]["txt"][:26], round(r, 2)))
+        for h in dup_texts(bs):
+            dups.append((i,) + h)
 
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
@@ -162,7 +217,9 @@ def main(path):
         lambda x: f"p{x[0]:3d} 필요 {x[2]}pt / 박스 {x[3]}pt  '{x[1]}'")
     rep("글자 있는 도형끼리 겹침", collide,
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide)
+    rep("도해 안 글자가 슬라이드 글자와 중복", dups,
+        lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
