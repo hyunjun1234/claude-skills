@@ -4,14 +4,17 @@
     "name": "hyunjun1234",
     "url": "https://github.com/hyunjun1234"
   },
-  "description": "도해 제작과 문서 변환 스킬 모음",
+  "description": "도해 제작과 문서 작성 스킬 모음",
   "plugins": [
     {
-      "name": "diagram-deck",
+      "name": "doc-studio",
       "source": "./",
-      "description": "SVG로 도해를 그려 PowerPoint 네이티브 도형으로 삽입하고, HTML과 PDF를 PPTX로 변환한다",
+      "description": "SVG 도해를 PPTX 네이티브 도형으로 삽입하고, HTML과 PDF를 PPTX로 변환하며, md 문서 작성 규칙을 적용한다",
       "repository": "https://github.com/hyunjun1234/claude-skills",
-      "keywords": ["pptx", "svg", "diagram", "presentation"]
+      "keywords": ["pptx", "svg", "diagram", "presentation", "markdown"]
     }
-  ]
+  ],
+  "renames": {
+    "diagram-deck": "doc-studio"
+  }
 }
