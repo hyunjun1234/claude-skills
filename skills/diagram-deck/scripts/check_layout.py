@@ -158,6 +158,11 @@ def dup_texts(bs, thr=0.80):
             ratio = SequenceMatcher(None, rn, tn).ratio()
             if ratio >= thr:
                 hits.append((label, ref[:36], b["txt"][:36], round(ratio, 2)))
+                continue
+            # 접두 포함: 도해 첫 줄이 "제목 + 덧붙임" 인 경우를 잡는다.
+            # 유사도만 보면 덧붙임이 길수록 비율이 떨어져 빠져나간다(L-23).
+            if len(rn) >= 8 and tn.startswith(rn):
+                hits.append((label + "(접두)", ref[:36], b["txt"][:36], 1.0))
     return hits
 
 
