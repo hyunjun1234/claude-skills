@@ -128,6 +128,25 @@ def _maxpt(sh):
     return m
 
 
+def text_heavy(bs, long_chars=12, long_ratio=0.75):
+    """도해 그룹이 "그림"이 아니라 "글 상자 나열"인지 본다 (L-24).
+
+    글 상자 덱의 지문: 그룹 안 글자 도형 중 12자 이상 문장이 3/4 이상이면서,
+    선·격자·화살표 같은 비글자 도형이 글자 도형보다 적다.
+    실측(2026-08-14): 글 상자 덱 5장 중 4장 검출, 그림 덱 4종 15장 중 1장(경계) 검출.
+    """
+    g = [b for b in bs if b["in_group"]]
+    t = [b for b in g if b["txt"]]
+    n = [b for b in g if not b["txt"]]
+    if len(t) < 8:
+        return None
+    long = [b for b in t if len(b["txt"]) >= long_chars]
+    ratio = len(long) / len(t)
+    if ratio >= long_ratio and len(n) < len(t):
+        return (len(t), len(n), round(ratio, 2))
+    return None
+
+
 def dup_texts(bs, thr=0.80):
     """도해(그룹) 안 글자가 슬라이드 제목·핵심줄과 같은 말인지 본다.
 
@@ -204,7 +223,7 @@ def overlap(a, b):
 def main(path):
     prs = Presentation(path)
     W, H = prs.slide_width, prs.slide_height
-    over_h, over_w, collide, outside, dups = [], [], [], [], []
+    over_h, over_w, collide, outside, dups, heavy = [], [], [], [], [], []
     for i, s in enumerate(prs.slides, 1):
         bs = boxes(s)
         for b in bs:
@@ -231,6 +250,9 @@ def main(path):
                     collide.append((i, tb[x]["txt"][:26], tb[y]["txt"][:26], round(r, 2)))
         for h in dup_texts(bs):
             dups.append((i,) + h)
+        th = text_heavy(bs)
+        if th:
+            heavy.append((i,) + th)
 
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
@@ -249,6 +271,10 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("도해가 글 상자 나열(장문 라벨 ≥75% · 비글자 도형 부족)", heavy,
+        lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
+    # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
+    # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
     bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
@@ -270,6 +296,7 @@ def report_absolutes(path):
     return 0
 
 
-if "--absolutes" in sys.argv:
-    sys.exit(report_absolutes(sys.argv[1]))
-sys.exit(main(sys.argv[1]))
+if __name__ == "__main__":
+    if "--absolutes" in sys.argv:
+        sys.exit(report_absolutes(sys.argv[1]))
+    sys.exit(main(sys.argv[1]))
