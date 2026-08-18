@@ -147,6 +147,61 @@ def text_heavy(bs, long_chars=12, long_ratio=0.75):
     return None
 
 
+_DASH = re.compile(r"\s[—–]\s")
+
+
+def dash_titles(prs):
+    """'제목 — 덧붙임' 꼴을 잡는다 (L-26). 슬라이드 제목과 도해 첫 줄(①…) 이 대상."""
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        for b in boxes(s):
+            t = b["txt"].strip()
+            if not t or "\n" in t:
+                continue
+            is_title = (not b["in_group"]) and b["t"] < 914400   # 슬라이드 위 1in 안의 최상위 글자 = 제목
+            is_head = b["in_group"] and t[:1] in "①②③④⑤⑥"
+            if (is_title or is_head) and _DASH.search(t):
+                hits.append((i, t[:60]))
+    return hits
+
+
+_SUMMARY = re.compile(r"(요약|정리|한 줄|summary|recap)", re.I)
+
+
+def summary_last(prs):
+    """마지막 슬라이드가 '요약/정리' 제목의 표·불릿이면 잡는다 (L-28)."""
+    if len(prs.slides) < 2:
+        return None
+    s = prs.slides[-1]
+    # deck.py 는 제목을 placeholder 가 아니라 맨 위 텍스트박스로 그린다 → 가장 위쪽 글자 도형을 제목으로 본다
+    tb = [sh for sh in s.shapes if sh.has_text_frame and sh.text_frame.text.strip()]
+    if not tb:
+        return None
+    t = min(tb, key=lambda sh: sh.top).text_frame.text.strip().split("\n")[0]
+    if _SUMMARY.search(t):
+        return (len(prs.slides), t[:60])
+    return None
+
+
+def diagram_gap(prs, max_in=0.45):
+    """도해 위·아래에 뜬 빈 띠를 잰다 (L-25). 도해 그룹 위쪽 여백(제목 밑줄과의 간격)과
+    도해↔설명 간격이 max_in 인치를 넘으면 보고한다."""
+    hits = []
+    IN = 914400
+    for i, s in enumerate(prs.slides, 1):
+        grp = [sh for sh in s.shapes if sh.shape_type == 6]
+        if not grp:
+            continue
+        g = grp[0]
+        below = [sh for sh in s.shapes if sh.shape_type != 6 and sh.has_text_frame and sh.text_frame.text.strip()
+                 and sh.top >= g.top + g.height - 1000]
+        if below:
+            gap = (min(sh.top for sh in below) - (g.top + g.height)) / IN
+            if gap > max_in:
+                hits.append((i, "도해↔설명", round(gap, 2)))
+    return hits
+
+
 def dup_texts(bs, thr=0.80):
     """도해(그룹) 안 글자가 슬라이드 제목·핵심줄과 같은 말인지 본다.
 
@@ -254,6 +309,10 @@ def main(path):
         if th:
             heavy.append((i,) + th)
 
+    dashes = dash_titles(prs)
+    summ = summary_last(prs)
+    gaps = diagram_gap(prs)
+
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
         for it in items[:18]:
@@ -271,11 +330,14 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("제목·도해 머리글의 '— 덧붙임' 꼴 (L-26)", dashes, lambda x: f"p{x[0]:3d}  '{x[1]}'")
+    rep("마지막 슬라이드가 요약·정리 (L-28)", [summ] if summ else [], lambda x: f"p{x[0]:3d}  '{x[1]}'")
+    rep("도해 위·아래 빈 띠 (L-25, 0.45in 초과)", gaps, lambda x: f"p{x[0]:3d}  {x[1]} {x[2]}in")
     rep("도해가 글 상자 나열(장문 라벨 ≥75% · 비글자 도형 부족)", heavy,
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 

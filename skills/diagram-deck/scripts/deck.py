@@ -606,11 +606,14 @@ class Deck:
         else:
             need = 0
         dh = max(Inches(3.10), min(dia_h, avail - need - Inches(0.10)))
+        # 그림은 예약 박스의 **위쪽**에 붙인다(valign='top'). 가로로 넓적한 도해는 폭 맞춤 뒤
+        # 세로가 남는데, 세로 중앙에 두면 그림 위·아래에 빈 띠가 생긴다(L-25). 설명은
+        # 예약 높이(dh)가 아니라 **실제 그림 높이(gh)** 바로 아래부터 시작해 남는 세로를 다 쓴다.
         g, gw, gh, n, minpt = add_svg_shapes(s.shapes, svg, E(ML), E(top),
-                                             width=E(BODY_W), height=E(dh))
+                                             width=E(BODY_W), height=E(dh), valign="top")
         g.name = name or "도해"
         if items:
-            by = top + dh + Inches(0.12)
+            by = top + min(dh, gh) + Inches(0.12)
             self._bullets_cols(s, items, ML, by, BODY_W, BODY_BOT - by -
                                (Inches(0.70) if callout else 0), cols=cols, gap=gap)
         self._callout(s, callout)

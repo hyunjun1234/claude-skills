@@ -279,7 +279,7 @@ def _stroke(shape, col, w_pt, dash):
         shape.line.dash_style = MSO_LINE_DASH_STYLE.DASH
 
 
-def add_svg_shapes(shapes, svg: str, left, top, width=None, height=None):
+def add_svg_shapes(shapes, svg: str, left, top, width=None, height=None, valign="center"):
     """SVG 를 네이티브 도형 그룹으로 슬라이드에 넣는다.
 
     left/top/width/height 는 EMU. width 나 height 중 하나만 줘도 비율로 맞춘다.
@@ -295,7 +295,7 @@ def add_svg_shapes(shapes, svg: str, left, top, width=None, height=None):
     else:
         k = height / bh
     ox = left + ((width - bw * k) / 2 if width else 0)
-    oy = top + ((height - bh * k) / 2 if height else 0)
+    oy = top + ((height - bh * k) / 2 if (height and valign == "center") else 0)   # valign='top' 이면 위에 붙인다
 
     def X(v):
         return Emu(int(round(ox + (v - x0) * k)))
