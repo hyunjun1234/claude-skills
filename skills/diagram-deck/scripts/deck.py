@@ -299,6 +299,10 @@ class Deck:
                 return s, total / h_pt
         return sizes[-1], total / h_pt
 
+    # 도해 슬라이드의 글머리 기호 크기는 고정한다 (L-30).
+    # _fit() 으로 슬라이드마다 다른 크기를 고르면 11/14/19pt 로 제각각이 된다 (실측 2026-08-14).
+    DIA_ITEM_PT = 12
+
     @staticmethod
     def _needed_pt(items, width_emu, size):
         """이 글자 크기로 넣으면 세로로 몇 pt 가 필요한가."""
@@ -542,12 +546,12 @@ class Deck:
         self._note(s, note)
         return s
 
-    def _bullets_cols(self, s, items, x, y, w, h, cols=2, gap=Inches(0.34)):
+    def _bullets_cols(self, s, items, x, y, w, h, cols=2, gap=Inches(0.34), size=None):
         """설명을 여러 단으로 나눠 넣는다. 그림 아래 얕은 띠에 쓴다."""
         if not items:
             return
         if cols <= 1 or len(items) < 3:
-            return self._bullets(s, items, x, y, w, h)
+            return self._bullets(s, items, x, y, w, h, size=size)
         # lv==0 을 기준으로 끊어야 하위 항목이 부모와 떨어지지 않는다
         groups, cur = [], []
         for it in items:
@@ -562,7 +566,7 @@ class Deck:
         cw = (w - gap * (cols - 1)) / cols
         col, acc = [], 0.0
         placed = 0
-        size = self._fit(items, int(cw), int(h))[0]
+        size = size or self._fit(items, int(cw), int(h))[0]
         worst = 0.0
         chunks = []
         for g, wt in zip(groups, weight):
@@ -601,8 +605,8 @@ class Deck:
         gap = Inches(0.34)
         cw = (BODY_W - gap * (cols - 1)) / cols
         if items:
-            need = Inches(self._needed_pt(items, int(cw), 10.0) / cols / 72.0)
-            need = max(Inches(0.80), min(need + Inches(0.10), Inches(2.05)))
+            need = Inches(self._needed_pt(items, int(cw), float(self.DIA_ITEM_PT)) / cols / 72.0)
+            need = max(Inches(0.80), need + Inches(0.10))   # 12pt 가 다 들어갈 만큼 뗀다 — 위 캡 없음
         else:
             need = 0
         dh = max(Inches(3.10), min(dia_h, avail - need - Inches(0.10)))
@@ -615,7 +619,8 @@ class Deck:
         if items:
             by = top + min(dh, gh) + Inches(0.12)
             self._bullets_cols(s, items, ML, by, BODY_W, BODY_BOT - by -
-                               (Inches(0.70) if callout else 0), cols=cols, gap=gap)
+                               (Inches(0.70) if callout else 0), cols=cols, gap=gap,
+                               size=self.DIA_ITEM_PT)
         self._callout(s, callout)
         self._note(s, note)
         return s, n, minpt, (gw, gh)

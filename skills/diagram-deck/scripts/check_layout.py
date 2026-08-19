@@ -150,6 +150,36 @@ def text_heavy(bs, long_chars=12, long_ratio=0.75):
 _DASH = re.compile(r"\s[—–]\s")
 
 
+def bullet_and_scale(prs, want_pt=12.0, width_ratio=0.97):
+    """도해 슬라이드의 글머리 크기 고정(12pt)과 도해 축척 균일(폭 편차 ≤3%)을 본다 (L-30)."""
+    bad_pt, widths = [], []
+    for i, s in enumerate(prs.slides, 1):
+        grp = [sh for sh in s.shapes if sh.shape_type == 6]
+        if not grp:
+            continue
+        g = grp[0]
+        widths.append((i, g.width))
+        for sh in s.shapes:
+            if sh.shape_type == 6 or not sh.has_text_frame:
+                continue
+            if sh.top < g.top + g.height:            # 도해 아래 = 글머리 영역
+                continue
+            if sh.top > prs.slide_height - 457200:   # 맨 아래 0.5in = 꼬리말 제외
+                continue
+            for pgh in sh.text_frame.paragraphs:
+                for r in pgh.runs:
+                    if r.font.size and abs(r.font.size.pt - want_pt) > 0.1:
+                        bad_pt.append((i, round(r.font.size.pt, 1), r.text[:30]))
+                        break
+    scale_bad = []
+    if len(widths) >= 2:
+        mx = max(w for _, w in widths)
+        for i, w in widths:
+            if w < mx * width_ratio:
+                scale_bad.append((i, round(w / mx, 3)))
+    return bad_pt, scale_bad
+
+
 def dash_titles(prs):
     """'제목 — 덧붙임' 꼴을 잡는다 (L-26). 슬라이드 제목과 도해 첫 줄(①…) 이 대상."""
     hits = []
@@ -310,6 +340,7 @@ def main(path):
             heavy.append((i,) + th)
 
     dashes = dash_titles(prs)
+    bad_pt, scale_bad = bullet_and_scale(prs)
     summ = summary_last(prs)
     gaps = diagram_gap(prs)
 
@@ -330,6 +361,8 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("도해 글머리 크기가 12pt 아님 (L-30)", bad_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
+    rep("도해 축척 불일치(폭 편차 >3%) (L-30)", scale_bad, lambda x: f"p{x[0]:3d}  최대폭 대비 {x[1]:.0%}")
     rep("제목·도해 머리글의 '— 덧붙임' 꼴 (L-26)", dashes, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("마지막 슬라이드가 요약·정리 (L-28)", [summ] if summ else [], lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해 위·아래 빈 띠 (L-25, 0.45in 초과)", gaps, lambda x: f"p{x[0]:3d}  {x[1]} {x[2]}in")
@@ -337,7 +370,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
