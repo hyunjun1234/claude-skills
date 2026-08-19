@@ -396,6 +396,133 @@ def absolutes(bs):
     return hits
 
 
+
+def _is_solid(sh):
+    """색이 칠해진 도형인가 (svg fill="none" 은 background 라 제외)."""
+    try:
+        return sh.fill.type == 1          # MSO_FILL.SOLID
+    except Exception:
+        return False
+
+
+def seq_order(prs):
+    """같은 접두어+번호 라벨(검증 1·검증 2…)이 읽기 순서로 놓였는지 (L-34).
+
+    번호순으로 정렬해 중심 퍼짐이 큰 축을 진행 축으로 본다:
+    세로 계열은 번호가 클수록 아래, 가로 계열은 오른쪽이어야 한다.
+    (사다리 은유로 1번을 맨 아래 두면 읽기 순서가 뒤집힌다.)"""
+    pat = re.compile(r"^(\D{1,12}?)\s*(\d{1,2})\s*[:.·]")
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        gr = {}
+        for b in boxes(s):
+            if not b["txt"] or "\n" in b["txt"]:
+                continue
+            m = pat.match(b["txt"])
+            if not m or not m.group(1).strip():
+                continue
+            gr.setdefault(m.group(1).strip(), []).append((int(m.group(2)), b))
+        for pre, it in gr.items():
+            if len(it) < 2 or len({n for n, _ in it}) != len(it):
+                continue
+            it.sort(key=lambda q: q[0])
+            xs = [(b["l"] + b["r"]) / 2 for _, b in it]
+            ys = [(b["t"] + b["b"]) / 2 for _, b in it]
+            if max(ys) - min(ys) >= max(xs) - min(xs):
+                ok, ax = all(ys[k] < ys[k + 1] for k in range(len(ys) - 1)), "세로(위→아래)"
+            else:
+                ok, ax = all(xs[k] < xs[k + 1] for k in range(len(xs) - 1)), "가로(왼→오른)"
+            if not ok:
+                hits.append((i, pre, ax))
+    return hits
+
+
+def text_clash(prs, tol=int(0.03 * 914400)):
+    """도해 글자가 **제 바탕이 아닌** 색칠 도형과 겹치는지 (L-33 확장).
+
+    글자 중심이 그 도형 안이면 도형 위 라벨이므로 제외. 화살촉이 캡션을
+    찌르거나 라벨이 옆 도형을 침범하면 양 축 모두 0.03in 넘게 겹친다."""
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        texts = [b for b in bs if b["in_group"] and b["txt"] and "\n" not in b["txt"]]
+        solids = [b for b in bs if b["in_group"] and not b["txt"] and _is_solid(b["sh"])]
+        for t in texts:
+            cx, cy = (t["l"] + t["r"]) // 2, (t["t"] + t["b"]) // 2
+            for r in solids:
+                if r["l"] <= cx <= r["r"] and r["t"] <= cy <= r["b"]:
+                    continue
+                ox = min(t["r"], r["r"]) - max(t["l"], r["l"])
+                oy = min(t["b"], r["b"]) - max(t["t"], r["t"])
+                if ox > tol and oy > tol:
+                    hits.append((i, t["txt"][:26], round(ox / EMU_IN, 2), round(oy / EMU_IN, 2)))
+                    break
+    return hits
+
+
+def covered_arrows(prs, frac=0.25):
+    """앞서 그린 화살표·화살촉이 나중에 그린 색칠 도형에 덮이는지 (L-35).
+
+    svg2shapes 는 문서 순서 = z순서다. 후보는 가는 도형(짧은 변 <0.06in,
+    선)과 작은 도형(긴 변 ≤0.16in, 화살촉). 이후의 4배 이상 큰 솔리드가
+    후보 넓이의 frac 이상을 덮으면 보고한다."""
+    hits = []
+    IN = EMU_IN
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        for j, t in enumerate(bs):
+            if t["txt"] or not t["in_group"]:
+                continue
+            w, h = t["r"] - t["l"], t["b"] - t["t"]
+            if not (min(w, h) < int(0.06 * IN) or max(w, h) <= int(0.16 * IN)):
+                continue
+            l, tp, r, bt = t["l"], t["t"], t["r"], t["b"]
+            if h < int(0.02 * IN):
+                tp -= int(0.01 * IN); bt += int(0.01 * IN)
+            if w < int(0.02 * IN):
+                l -= int(0.01 * IN); r += int(0.01 * IN)
+            area = max(1, (r - l) * (bt - tp))
+            for c in bs[j + 1:]:
+                if c["txt"] or not c["in_group"] or not _is_solid(c["sh"]):
+                    continue
+                if (c["r"] - c["l"]) * (c["b"] - c["t"]) < 4 * area:
+                    continue
+                ox = min(r, c["r"]) - max(l, c["l"])
+                oy = min(bt, c["b"]) - max(tp, c["t"])
+                if ox > 0 and oy > 0 and ox * oy > frac * area:
+                    hits.append((i, ox * oy / area,
+                                 round(t["l"] / IN, 2), round(t["t"] / IN, 2)))
+                    break
+    return hits
+
+
+def box_slack(prs, min_slack=int(0.7 * 914400)):
+    """왼쪽 정렬 라벨 상자의 오른쪽 빈 폭 과다 (L-36).
+
+    상자 안 글자 묶음의 오른쪽 빈 폭이 0.7in 이상이면서 왼쪽 여백의 3배
+    이상이면 — 상자 폭이 내용이 아니라 임의로 정해진 것이다. 폭을 내용에
+    맞춰라. 컨테이너(높이 ≥1.2in 또는 폭 ≥6in)는 제외."""
+    hits = []
+    IN = EMU_IN
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        texts = [b for b in bs if b["in_group"] and b["txt"] and "\n" not in b["txt"]]
+        rects = [b for b in bs if b["in_group"] and not b["txt"]
+                 and int(0.10 * IN) < (b["b"] - b["t"]) < int(1.2 * IN)
+                 and (b["r"] - b["l"]) < int(6.0 * IN)]
+        for r in rects:
+            ins = [t for t in texts
+                   if r["l"] <= (t["l"] + t["r"]) // 2 <= r["r"]
+                   and r["t"] <= (t["t"] + t["b"]) // 2 <= r["b"]]
+            if not ins:
+                continue
+            sr = r["r"] - max(t["r"] for t in ins)
+            sl = min(t["l"] for t in ins) - r["l"]
+            if sr >= min_slack and sr >= 3 * max(sl, int(0.05 * IN)):
+                hits.append((i, round(sr / IN, 2), ins[0]["txt"][:26]))
+    return hits
+
+
 def overlap(a, b):
     ox = min(a["r"], b["r"]) - max(a["l"], b["l"])
     oy = min(a["b"], b["b"]) - max(a["t"], b["t"])
@@ -447,6 +574,10 @@ def main(path):
     lfit = label_fit(prs)
     summ = summary_last(prs)
     gaps = diagram_gap(prs)
+    clash = text_clash(prs)
+    cov = covered_arrows(prs)
+    slack = box_slack(prs)
+    seqs = seq_order(prs)
 
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
@@ -466,6 +597,10 @@ def main(path):
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
     rep("도해 라벨이 상자를 넘거나 꽉 참 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]} 여유 {x[2]}in  '{x[3]}'")
+    rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
+    rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
+    rep("상자 오른쪽 빈 폭 과다 (L-36)", slack, lambda x: f"p{x[0]:3d}  빈 폭 {x[1]}in  '{x[2]}'")
+    rep("순번 라벨이 읽기 순서 역행 (L-34)", seqs, lambda x: f"p{x[0]:3d}  '{x[1]} n' 계열 {x[2]} 역행")
     rep("색 계열 과다 — 무채 제외 3군 이상 (L-32)", hues, lambda x: f"강조 색상군 {x[0]}개: {x[1]}")
     rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해 머리글 크기가 14pt 아님 (L-31)", hd_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
@@ -479,7 +614,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(slack) + len(seqs)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
