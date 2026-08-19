@@ -180,6 +180,36 @@ def bullet_and_scale(prs, want_pt=12.0, width_ratio=0.97):
     return bad_pt, scale_bad
 
 
+_CIRC = "①②③④⑤⑥⑦⑧⑨"
+
+
+def head_check(prs, want_pt=14.0):
+    """도해 머리글 규약 (L-31): SVG 밖 슬라이드 층 · 14pt · 슬라이드마다 다른 번호."""
+    in_svg, bad_pt, nums = [], [], []
+    for i, s in enumerate(prs.slides, 1):
+        for b in boxes(s):
+            t = b["txt"].strip()
+            if not t or t[0] not in _CIRC:
+                continue
+            first = t.split("\n")[0]
+            if b["in_group"]:
+                in_svg.append((i, first[:40]))          # 머리글이 SVG 안에 있음
+                continue
+            sh = b["sh"]
+            r = next((r for pgh in sh.text_frame.paragraphs for r in pgh.runs if r.text.strip()), None)
+            pt = r.font.size.pt if (r and r.font.size) else None
+            if pt is None or abs(pt - want_pt) > 0.1:
+                bad_pt.append((i, pt, first[:40]))
+            nums.append((i, t[0]))
+    dup = []
+    seen = {}
+    for i, c in nums:
+        if c in seen:
+            dup.append((i, c, seen[c]))
+        seen.setdefault(c, i)
+    return in_svg, bad_pt, dup
+
+
 def dash_titles(prs):
     """'제목 — 덧붙임' 꼴을 잡는다 (L-26). 슬라이드 제목과 도해 첫 줄(①…) 이 대상."""
     hits = []
@@ -341,6 +371,7 @@ def main(path):
 
     dashes = dash_titles(prs)
     bad_pt, scale_bad = bullet_and_scale(prs)
+    hd_svg, hd_pt, hd_dup = head_check(prs)
     summ = summary_last(prs)
     gaps = diagram_gap(prs)
 
@@ -361,6 +392,9 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
+    rep("도해 머리글 크기가 14pt 아님 (L-31)", hd_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
+    rep("도해 머리글 번호 중복 (L-31)", hd_dup, lambda x: f"p{x[0]:3d}  '{x[1]}' 이 p{x[2]} 와 중복")
     rep("도해 글머리 크기가 12pt 아님 (L-30)", bad_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
     rep("도해 축척 불일치(폭 편차 >3%) (L-30)", scale_bad, lambda x: f"p{x[0]:3d}  최대폭 대비 {x[1]:.0%}")
     rep("제목·도해 머리글의 '— 덧붙임' 꼴 (L-26)", dashes, lambda x: f"p{x[0]:3d}  '{x[1]}'")
@@ -370,7 +404,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 

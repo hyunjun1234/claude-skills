@@ -584,8 +584,12 @@ class Deck:
         if worst > 1.0:
             OVERFLOW.append((self.n, self._cur_title, round(worst, 2)))
 
+    # 도해 머리글(head=)은 SVG 가 아니라 슬라이드 층에 고정 크기로 그린다 (L-31).
+    # SVG 안에 넣으면 도해 축척을 타서 슬라이드마다 12.2/11.9pt 로 갈라진다 (실측 2026-08-14).
+    DIA_HEAD_PT = 14
+
     def diagram_svg(self, title, svg, items=None, subtitle=None, callout=None,
-                    note=None, dia_h=Inches(4.60), cols=2, name=None):
+                    note=None, dia_h=Inches(4.60), cols=2, name=None, head=None):
         """SVG 도해를 **네이티브 도형 그룹**으로 넣는다(PNG 아님).
 
         상자·화살표·글자가 각각 PowerPoint 도형이라 그대로 편집할 수 있다.
@@ -599,6 +603,10 @@ class Deck:
 
         s = self._new()
         top = self._chrome(s, title, subtitle, tight=True)
+        if head:
+            hb = tbox(s, ML, top, BODY_W, Inches(0.30))     # tbox 는 TextFrame 을 돌려준다
+            para(hb, True, head, self.DIA_HEAD_PT, bold=True, color=INK)
+            top += Inches(0.34)
         avail = BODY_BOT - top - (Inches(0.70) if callout else 0)
         # 설명이 실제로 차지할 높이만큼만 떼어 주고 나머지는 전부 그림에 준다.
         # 고정 비율로 나누면 설명이 짧은 장에서 그림이 공연히 작아진다.
