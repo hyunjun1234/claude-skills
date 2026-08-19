@@ -241,6 +241,32 @@ def accent_hues(prs, max_hues=2):
     return []
 
 
+def label_fit(prs, tol=25400):
+    """도해 안 라벨이 뒤에 깔린 상자를 넘는지 본다 (L-33).
+
+    svg2shapes 는 라벨마다 독립 텍스트박스를 만들므로 기존 가로 넘침 검사가 못 본다.
+    같은 그룹 안에서 라벨 중심을 포함하는 가장 작은 라벨급 상자(높이<0.9in, 폭<3.2in)를 찾아
+    라벨 좌우가 상자를 tol(0.028in) 이상 벗어나면 보고한다."""
+    hits = []
+    IN = 914400
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        texts = [b for b in bs if b["in_group"] and b["txt"] and "\n" not in b["txt"]]
+        rects = [b for b in bs if b["in_group"] and not b["txt"]
+                 and (b["b"] - b["t"]) < int(0.9 * IN) and (b["r"] - b["l"]) < int(3.2 * IN)
+                 and (b["b"] - b["t"]) > int(0.10 * IN)]
+        for t in texts:
+            cx, cy = (t["l"] + t["r"]) // 2, (t["t"] + t["b"]) // 2
+            cands = [r for r in rects if r["l"] <= cx <= r["r"] and r["t"] <= cy <= r["b"]]
+            if not cands:
+                continue
+            r = min(cands, key=lambda q: (q["r"] - q["l"]) * (q["b"] - q["t"]))
+            over = max(r["l"] - t["l"], t["r"] - r["r"])
+            if over > tol:
+                hits.append((i, round(over / IN, 2), t["txt"][:30]))
+    return hits
+
+
 def dash_titles(prs):
     """'제목 — 덧붙임' 꼴을 잡는다 (L-26). 슬라이드 제목과 도해 첫 줄(①…) 이 대상."""
     hits = []
@@ -414,6 +440,7 @@ def main(path):
     bad_pt, scale_bad = bullet_and_scale(prs)
     hd_svg, hd_pt, hd_dup = head_check(prs)
     hues = accent_hues(prs)
+    lfit = label_fit(prs)
     summ = summary_last(prs)
     gaps = diagram_gap(prs)
 
@@ -434,6 +461,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("도해 라벨이 상자를 넘음 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]}in 초과  '{x[2]}'")
     rep("색 계열 과다 — 무채 제외 3군 이상 (L-32)", hues, lambda x: f"강조 색상군 {x[0]}개: {x[1]}")
     rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해 머리글 크기가 14pt 아님 (L-31)", hd_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
@@ -447,7 +475,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
