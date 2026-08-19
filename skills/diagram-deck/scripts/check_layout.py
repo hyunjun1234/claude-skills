@@ -263,7 +263,11 @@ def label_fit(prs, tol=25400):
             r = min(cands, key=lambda q: (q["r"] - q["l"]) * (q["b"] - q["t"]))
             over = max(r["l"] - t["l"], t["r"] - r["r"])
             if over > tol:
-                hits.append((i, round(over / IN, 2), t["txt"][:30]))
+                hits.append((i, "넘침", round(over / IN, 2), t["txt"][:30]))
+            elif over > -int(0.08 * IN) and len(t["txt"]) >= 3 and (r["r"] - r["l"]) >= int(0.3 * IN):
+                # 라벨이 상자에 거의 닿음 — 좌우 여유 0.08in 미만 (L-33; 글폭 추정이 낙관적이라 문턱 넉넉히).
+                # 격자 칸의 한두 글자 숫자는 딱 맞는 게 정상이라 제외 (길이<3 or 상자 폭<0.3in).
+                hits.append((i, "꽉참", round(-over / IN, 2), t["txt"][:30]))
     return hits
 
 
@@ -461,7 +465,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
-    rep("도해 라벨이 상자를 넘음 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]}in 초과  '{x[2]}'")
+    rep("도해 라벨이 상자를 넘거나 꽉 참 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]} 여유 {x[2]}in  '{x[3]}'")
     rep("색 계열 과다 — 무채 제외 3군 이상 (L-32)", hues, lambda x: f"강조 색상군 {x[0]}개: {x[1]}")
     rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해 머리글 크기가 14pt 아님 (L-31)", hd_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
