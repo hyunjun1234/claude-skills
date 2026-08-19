@@ -210,6 +210,37 @@ def head_check(prs, want_pt=14.0):
     return in_svg, bad_pt, dup
 
 
+def accent_hues(prs, max_hues=2):
+    """도해의 색 계열 수를 센다 (L-32). 무채색(잉크·회색) 제외 강조 색상군이
+    max_hues(기본 2: 강조 1 + 하이라이트 1)를 넘으면 알록달록으로 보고한다."""
+    import colorsys
+    buckets = {}
+    for i, s in enumerate(prs.slides, 1):
+        for b in boxes(s):
+            sh = b["sh"]
+            cols = []
+            try:
+                if sh.fill.type is not None and str(sh.fill.type) == "MSO_FILL_TYPE.SOLID":
+                    cols.append(sh.fill.fore_color.rgb)
+            except Exception:
+                pass
+            try:
+                cols.append(sh.line.color.rgb)
+            except Exception:
+                pass
+            for c in cols:
+                if c is None:
+                    continue
+                r, g, bl = c[0], c[1], c[2]
+                if max(r, g, bl) - min(r, g, bl) < 28:      # 무채색
+                    continue
+                h = colorsys.rgb_to_hsv(r / 255, g / 255, bl / 255)[0]
+                buckets.setdefault(round(h * 6) % 6, set()).add(f"#{c}")
+    if len(buckets) > max_hues:
+        return [(len(buckets), "; ".join(sorted(min(v) for v in buckets.values())))]
+    return []
+
+
 def dash_titles(prs):
     """'제목 — 덧붙임' 꼴을 잡는다 (L-26). 슬라이드 제목과 도해 첫 줄(①…) 이 대상."""
     hits = []
@@ -382,6 +413,7 @@ def main(path):
     dashes = dash_titles(prs)
     bad_pt, scale_bad = bullet_and_scale(prs)
     hd_svg, hd_pt, hd_dup = head_check(prs)
+    hues = accent_hues(prs)
     summ = summary_last(prs)
     gaps = diagram_gap(prs)
 
@@ -402,6 +434,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[3]:.0%}  '{x[1]}' ↔ '{x[2]}'")
     rep("도해 안 글자가 슬라이드 글자와 중복", dups,
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
+    rep("색 계열 과다 — 무채 제외 3군 이상 (L-32)", hues, lambda x: f"강조 색상군 {x[0]}개: {x[1]}")
     rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해 머리글 크기가 14pt 아님 (L-31)", hd_pt, lambda x: f"p{x[0]:3d}  {x[1]}pt  '{x[2]}'")
     rep("도해 머리글 번호 중복 (L-31)", hd_dup, lambda x: f"p{x[0]:3d}  '{x[1]}' 이 p{x[2]} 와 중복")
@@ -414,7 +447,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
