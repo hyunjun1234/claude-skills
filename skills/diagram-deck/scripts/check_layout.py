@@ -243,9 +243,10 @@ def summary_last(prs):
     return None
 
 
-def diagram_gap(prs, max_in=0.45):
-    """도해 위·아래에 뜬 빈 띠를 잰다 (L-25). 도해 그룹 위쪽 여백(제목 밑줄과의 간격)과
-    도해↔설명 간격이 max_in 인치를 넘으면 보고한다."""
+def diagram_gap(prs, min_in=0.18, max_in=0.45):
+    """도해 주변 간격을 잰다 (L-25). 너무 넓으면 빈 띠, 너무 좁으면 답답하다 —
+    도해↔설명 간격이 [min_in, max_in] 인치 범위를 벗어나면 보고한다.
+    머리글(원문자 시작 슬라이드 층 글자)↔도해 간격도 min_in 미만이면 보고."""
     hits = []
     IN = 914400
     for i, s in enumerate(prs.slides, 1):
@@ -258,7 +259,16 @@ def diagram_gap(prs, max_in=0.45):
         if below:
             gap = (min(sh.top for sh in below) - (g.top + g.height)) / IN
             if gap > max_in:
-                hits.append((i, "도해↔설명", round(gap, 2)))
+                hits.append((i, "도해↔설명 넓음", round(gap, 2)))
+            elif gap < min_in:
+                hits.append((i, "도해↔설명 좁음", round(gap, 2)))
+        heads = [sh for sh in s.shapes if sh.shape_type != 6 and sh.has_text_frame
+                 and sh.text_frame.text.strip()[:1] in _CIRC and sh.top < g.top]
+        for hd in heads:
+            # 머리글 상자 높이가 아니라 글자 높이(14pt≈0.19in) 기준으로 잰다
+            gap = (g.top - hd.top) / IN - 0.20
+            if gap < min_in:
+                hits.append((i, "머리글↔도해 좁음", round(gap, 2)))
     return hits
 
 
@@ -399,7 +409,7 @@ def main(path):
     rep("도해 축척 불일치(폭 편차 >3%) (L-30)", scale_bad, lambda x: f"p{x[0]:3d}  최대폭 대비 {x[1]:.0%}")
     rep("제목·도해 머리글의 '— 덧붙임' 꼴 (L-26)", dashes, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("마지막 슬라이드가 요약·정리 (L-28)", [summ] if summ else [], lambda x: f"p{x[0]:3d}  '{x[1]}'")
-    rep("도해 위·아래 빈 띠 (L-25, 0.45in 초과)", gaps, lambda x: f"p{x[0]:3d}  {x[1]} {x[2]}in")
+    rep("도해 주변 간격 범위 밖 (L-25, 0.18~0.45in)", gaps, lambda x: f"p{x[0]:3d}  {x[1]} {x[2]}in")
     rep("도해가 글 상자 나열(장문 라벨 ≥75% · 비글자 도형 부족)", heavy,
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서

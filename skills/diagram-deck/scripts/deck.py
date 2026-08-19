@@ -604,9 +604,10 @@ class Deck:
         s = self._new()
         top = self._chrome(s, title, subtitle, tight=True)
         if head:
+            top += Inches(0.08)                              # 제목 밑줄과 머리글 사이 숨
             hb = tbox(s, ML, top, BODY_W, Inches(0.30))     # tbox 는 TextFrame 을 돌려준다
             para(hb, True, head, self.DIA_HEAD_PT, bold=True, color=INK)
-            top += Inches(0.34)
+            top += Inches(0.30) + Inches(0.18)               # 머리글 높이 + 그림과의 간격 (L-25)
         avail = BODY_BOT - top - (Inches(0.70) if callout else 0)
         # 설명이 실제로 차지할 높이만큼만 떼어 주고 나머지는 전부 그림에 준다.
         # 고정 비율로 나누면 설명이 짧은 장에서 그림이 공연히 작아진다.
@@ -625,7 +626,7 @@ class Deck:
                                              width=E(BODY_W), height=E(dh), valign="top")
         g.name = name or "도해"
         if items:
-            by = top + min(dh, gh) + Inches(0.12)
+            by = top + min(dh, gh) + Inches(0.26)       # 그림과 설명 사이 간격 (L-25: 0.18~0.45in)
             self._bullets_cols(s, items, ML, by, BODY_W, BODY_BOT - by -
                                (Inches(0.70) if callout else 0), cols=cols, gap=gap,
                                size=self.DIA_ITEM_PT)
