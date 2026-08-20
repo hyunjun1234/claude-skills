@@ -523,6 +523,21 @@ def box_slack(prs, min_slack=int(0.7 * 914400)):
     return hits
 
 
+
+def no_middot(prs):
+    """PPT 안 모든 글에서 가운뎃점 금지 (L-37).
+
+    나열은 쉼표, 짝·대안은 빗금(/), 곱은 × 로 쓴다. U+00B7 외에
+    한글 가운뎃점(U+318D)·하이픈점(U+2027)도 같이 잡는다."""
+    bad = ("\u00b7", "\u318d", "\u2027")
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        for b in boxes(s):
+            if b["txt"] and any(ch in b["txt"] for ch in bad):
+                hits.append((i, b["txt"][:40]))
+    return hits
+
+
 def overlap(a, b):
     ox = min(a["r"], b["r"]) - max(a["l"], b["l"])
     oy = min(a["b"], b["b"]) - max(a["t"], b["t"])
@@ -578,6 +593,7 @@ def main(path):
     cov = covered_arrows(prs)
     slack = box_slack(prs)
     seqs = seq_order(prs)
+    dots = no_middot(prs)
 
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
@@ -600,6 +616,7 @@ def main(path):
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
     rep("상자 오른쪽 빈 폭 과다 (L-36)", slack, lambda x: f"p{x[0]:3d}  빈 폭 {x[1]}in  '{x[2]}'")
+    rep("가운뎃점 '·' 사용 (L-37)", dots, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("순번 라벨이 읽기 순서 역행 (L-34)", seqs, lambda x: f"p{x[0]:3d}  '{x[1]} n' 계열 {x[2]} 역행")
     rep("색 계열 과다 — 무채 제외 3군 이상 (L-32)", hues, lambda x: f"강조 색상군 {x[0]}개: {x[1]}")
     rep("도해 머리글이 SVG 안에 있음 (L-31)", hd_svg, lambda x: f"p{x[0]:3d}  '{x[1]}'")
@@ -614,7 +631,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(slack) + len(seqs)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(slack) + len(seqs) + len(dots)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 

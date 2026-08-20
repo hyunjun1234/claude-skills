@@ -120,7 +120,7 @@ import sys; sys.path.insert(0, "<skill>/scripts")
 import deck
 d = deck.Deck("제목", "부제\n둘째 줄", "꼬리말")
 d.section("1", "부 제목", "설명")          # 부 표지
-d.part = "1부 · 부 제목"                    # 이후 슬라이드 머리말
+d.part = "1부: 부 제목"                    # 이후 슬라이드 머리말
 d.bullets("제목", [{"t": "내용"}, {"t": "하위", "lv": 1}], callout="핵심 한 줄")
 s, n, min_pt, _ = d.diagram_svg("제목", svg_markup,          # ← 내가 그린 도해: 네이티브 도형
                                 [{"t": "그림이 말하지 못하는 것만"}], callout="핵심 한 줄")

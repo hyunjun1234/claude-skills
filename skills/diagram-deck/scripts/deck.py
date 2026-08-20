@@ -330,7 +330,7 @@ class Deck:
             lv = it.get("lv", 0) or 0
             bold = bool(it.get("b"))
             txt = it["t"]
-            mark = {0: "▪  ", 1: "–  ", 2: "·  "}[min(lv, 2)]
+            mark = {0: "▪  ", 1: "–  ", 2: "-  "}[min(lv, 2)]   # 가운뎃점 금지 (L-37)
             fs = size if lv == 0 else size - 1.2
             col = INK if lv == 0 else MUTED if lv >= 2 else RGBColor(0x2C, 0x3A, 0x4B)
             if bold and lv == 0:
