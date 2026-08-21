@@ -501,13 +501,15 @@ def box_slack(prs, min_slack=int(0.7 * 914400)):
 
     상자 안 글자 묶음의 오른쪽 빈 폭이 0.7in 이상이면서 왼쪽 여백의 3배
     이상이면 — 상자 폭이 내용이 아니라 임의로 정해진 것이다. 폭을 내용에
-    맞춰라. 컨테이너(높이 ≥1.2in 또는 폭 ≥6in)는 제외."""
+    맞춰라. 컨테이너(높이 ≥1.2in 또는 폭 ≥6in)는 제외.
+    **채움이 있는 도형만 본다** — 사선 리더선의 bounding box 를 상자로 오인하던
+    오탐이 있었다(L-36 검사 수정)."""
     hits = []
     IN = EMU_IN
     for i, s in enumerate(prs.slides, 1):
         bs = boxes(s)
         texts = [b for b in bs if b["in_group"] and b["txt"] and "\n" not in b["txt"]]
-        rects = [b for b in bs if b["in_group"] and not b["txt"]
+        rects = [b for b in bs if b["in_group"] and not b["txt"] and _is_solid(b["sh"])
                  and int(0.10 * IN) < (b["b"] - b["t"]) < int(1.2 * IN)
                  and (b["r"] - b["l"]) < int(6.0 * IN)]
         for r in rects:
