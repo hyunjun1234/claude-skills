@@ -183,13 +183,26 @@ def bullet_and_scale(prs, want_pt=12.0, width_ratio=0.97):
 _CIRC = "①②③④⑤⑥⑦⑧⑨"
 
 
+_FIG_HEAD = re.compile(r"^그림\s*(\d+)\s*[:：]")
+
+
+def _head_key(t):
+    """머리글의 번호 키. 원문자(①…) 또는 '그림 N:' (L-38). 머리글이 아니면 None."""
+    if t and t[0] in _CIRC:
+        return t[0]
+    m = _FIG_HEAD.match(t)
+    return ("그림", m.group(1)) if m else None
+
+
 def head_check(prs, want_pt=14.0):
-    """도해 머리글 규약 (L-31): SVG 밖 슬라이드 층 · 14pt · 슬라이드마다 다른 번호."""
+    """도해 머리글 규약 (L-31, L-38): SVG 밖 슬라이드 층 · 14pt · 슬라이드마다 다른 번호.
+    머리글은 원문자(①…) 또는 '그림 N: 무엇을 그린 것인지' 로 시작한다."""
     in_svg, bad_pt, nums = [], [], []
     for i, s in enumerate(prs.slides, 1):
         for b in boxes(s):
             t = b["txt"].strip()
-            if not t or t[0] not in _CIRC:
+            key = _head_key(t)
+            if key is None:
                 continue
             first = t.split("\n")[0]
             if b["in_group"]:
@@ -200,7 +213,7 @@ def head_check(prs, want_pt=14.0):
             pt = r.font.size.pt if (r and r.font.size) else None
             if pt is None or abs(pt - want_pt) > 0.1:
                 bad_pt.append((i, pt, first[:40]))
-            nums.append((i, t[0]))
+            nums.append((i, key if isinstance(key, str) else f"그림 {key[1]}"))
     dup = []
     seen = {}
     for i, c in nums:
@@ -280,7 +293,7 @@ def dash_titles(prs):
             if not t or "\n" in t:
                 continue
             is_title = (not b["in_group"]) and b["t"] < 914400   # 슬라이드 위 1in 안의 최상위 글자 = 제목
-            is_head = b["in_group"] and t[:1] in "①②③④⑤⑥"
+            is_head = (b["in_group"] and t[:1] in "①②③④⑤⑥") or (_head_key(t) is not None)
             if (is_title or is_head) and _DASH.search(t):
                 hits.append((i, t[:60]))
     return hits
@@ -460,6 +473,35 @@ def text_clash(prs, tol=int(0.03 * 914400)):
     return hits
 
 
+def edge_touch(prs, tol_x=int(0.06 * 914400), tol_y=int(0.02 * 914400)):
+    """도해 글자가 **바깥에서** 색칠 도형의 테두리에 붙어 있는지 (L-40).
+
+    글자 중심이 어떤 솔리드 안에도 없는데(= 상자 밖 라벨), 어느 솔리드와
+    한 축은 겹치고 다른 축의 빈 틈이 문턱 미만이면 테두리에 닿은 것으로 본다.
+    문턱은 축마다 다르다: 가로 틈 0.06in(글자 상자 폭은 글자 폭과 같아 정확), 세로 틈 0.02in
+    (글자 상자는 줄 높이만큼 위아래로 커서 정상 캡션도 틈이 0.03~0.08in 으로 잡힌다).
+    행렬 도해의 치수 글자(M, K, N)가 상자 선에 물리던 사고에서 왔다."""
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        texts = [b for b in bs if b["in_group"] and b["txt"] and "\n" not in b["txt"]]
+        solids = [b for b in bs if b["in_group"] and not b["txt"] and _is_solid(b["sh"])
+                  and (b["r"] - b["l"]) > int(0.25 * 914400) and (b["b"] - b["t"]) > int(0.25 * 914400)]
+        for t in texts:
+            cx, cy = (t["l"] + t["r"]) // 2, (t["t"] + t["b"]) // 2
+            if any(r["l"] <= cx <= r["r"] and r["t"] <= cy <= r["b"] for r in solids):
+                continue
+            for r in solids:
+                ox = min(t["r"], r["r"]) - max(t["l"], r["l"])
+                oy = min(t["b"], r["b"]) - max(t["t"], r["t"])
+                gx = max(r["l"] - t["r"], t["l"] - r["r"])
+                gy = max(r["t"] - t["b"], t["t"] - r["b"])
+                if (oy > 0 and 0 <= gx < tol_x) or (ox > 0 and 0 <= gy < tol_y):
+                    hits.append((i, t["txt"][:26], round(max(gx, gy, 0) / EMU_IN, 3)))
+                    break
+    return hits
+
+
 def covered_arrows(prs, frac=0.25):
     """앞서 그린 화살표·화살촉이 나중에 그린 색칠 도형에 덮이는지 (L-35).
 
@@ -593,6 +635,7 @@ def main(path):
     gaps = diagram_gap(prs)
     clash = text_clash(prs)
     cov = covered_arrows(prs)
+    touch = edge_touch(prs)
     slack = box_slack(prs)
     seqs = seq_order(prs)
     dots = no_middot(prs)
@@ -617,6 +660,7 @@ def main(path):
     rep("도해 라벨이 상자를 넘거나 꽉 참 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]} 여유 {x[2]}in  '{x[3]}'")
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
+    rep("도해 글자가 도형 테두리에 붙음 (L-40, 가로 틈 <0.06in, 세로 <0.02in)", touch, lambda x: f"p{x[0]:3d}  틈 {x[2]}in  '{x[1]}'")
     rep("상자 오른쪽 빈 폭 과다 (L-36)", slack, lambda x: f"p{x[0]:3d}  빈 폭 {x[1]}in  '{x[2]}'")
     rep("가운뎃점 '·' 사용 (L-37)", dots, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("순번 라벨이 읽기 순서 역행 (L-34)", seqs, lambda x: f"p{x[0]:3d}  '{x[1]} n' 계열 {x[2]} 역행")
@@ -633,7 +677,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(slack) + len(seqs) + len(dots)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(seqs) + len(dots)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
