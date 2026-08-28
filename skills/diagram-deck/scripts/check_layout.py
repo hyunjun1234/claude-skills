@@ -538,6 +538,38 @@ def covered_arrows(prs, frac=0.25):
     return hits
 
 
+_PANEL = re.compile(r"^\(?[a-z가-힣]\)")
+
+
+def prose_in_diagram(prs, limit=40, allow=2):
+    """도해 안에 긴 자연어 문장이 여러 줄이면 그것은 표다 (L-41).
+
+    머리글 1줄 + 결론 1줄까지는 도해의 정상 구성이라 허용한다(allow=2).
+    그보다 많으면 `d.table()` 이나 글머리로 옮겨야 한다 — 그림 흉내를 낸 표는
+    text_heavy 경고와 되돌려 비교 실패를 동시에 부른다(실측 8.87%)."""
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        bs = boxes(s)
+        solids = [b for b in bs if b["in_group"] and not b["txt"] and _is_solid(b["sh"])]
+        cand = []
+        for b in bs:
+            t = (b["txt"] or "").strip()
+            if not b["in_group"] or not t or "\n" in t or len(t) <= limit:
+                continue
+            if _PANEL.match(t):            # (a) (b) … 패널 머리글은 구조 라벨이다(L-38)
+                continue
+            cx, cy = (b["l"] + b["r"]) // 2, (b["t"] + b["b"]) // 2
+            if any(r["l"] <= cx <= r["r"] and r["t"] <= cy <= r["b"] for r in solids):
+                continue                   # 상자 안 라벨은 도해의 정상 구성이다
+            cand.append((b["t"], t))
+        # 맨 아래 두 줄(결론 한 줄 + 출처 한 줄)은 허용한다
+        cand.sort()
+        cand = cand[:-2] if len(cand) > 2 else []
+        if len(cand) > allow:
+            hits.append((i, len(cand), cand[0][1][:34]))
+    return hits
+
+
 def box_slack(prs, min_slack=int(0.7 * 914400)):
     """왼쪽 정렬 라벨 상자의 오른쪽 빈 폭 과다 (L-36).
 
@@ -637,6 +669,7 @@ def main(path):
     cov = covered_arrows(prs)
     touch = edge_touch(prs)
     slack = box_slack(prs)
+    prose = prose_in_diagram(prs)
     seqs = seq_order(prs)
     dots = no_middot(prs)
 
@@ -661,6 +694,8 @@ def main(path):
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
     rep("도해 글자가 도형 테두리에 붙음 (L-40, 가로 틈 <0.06in, 세로 <0.02in)", touch, lambda x: f"p{x[0]:3d}  틈 {x[2]}in  '{x[1]}'")
+    rep("도해에 긴 문장이 여럿 — 표로 옮겨라 (L-41)", prose,
+        lambda x: f"p{x[0]:3d}  {x[1]}줄  '{x[2]}'")
     rep("상자 오른쪽 빈 폭 과다 (L-36)", slack, lambda x: f"p{x[0]:3d}  빈 폭 {x[1]}in  '{x[2]}'")
     rep("가운뎃점 '·' 사용 (L-37)", dots, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("순번 라벨이 읽기 순서 역행 (L-34)", seqs, lambda x: f"p{x[0]:3d}  '{x[1]} n' 계열 {x[2]} 역행")
@@ -677,7 +712,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(seqs) + len(dots)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(prose) + len(seqs) + len(dots)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
