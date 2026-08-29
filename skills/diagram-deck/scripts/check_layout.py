@@ -542,6 +542,55 @@ _Q_START = re.compile(r"^(무엇|어떻게|어떤|왜|얼마나|언제|누가|�
 _Q_END = re.compile(r"(했나|하나요|인가|일까|을까|를까|는가|은가|였나|나요)\??$")
 
 
+def _slide_kind(s):
+    if any(sh.has_table for sh in s.shapes):
+        return "표"
+    if any(sh.shape_type == 6 for sh in s.shapes):
+        return "도해"
+    for sh in s.shapes:
+        if sh.has_text_frame:
+            for p_ in sh.text_frame.paragraphs:
+                for r in p_.runs:
+                    if r.font.name == "Consolas":
+                        return "코드"
+    return "글머리"
+
+
+def _body_pt(s):
+    """그 슬라이드의 본문 글자 크기. 제목(위 1in)·꼬리말·부 표지 큰 글자는 뺀다."""
+    tbl, txt_ = [], []
+    for sh in s.shapes:
+        if sh.has_table:
+            for row in sh.table.rows:
+                for c in row.cells:
+                    tbl += [r.font.size.pt for p_ in c.text_frame.paragraphs
+                            for r in p_.runs if r.font.size]
+        elif sh.has_text_frame and (sh.top or 0) > EMU_IN:
+            txt_ += [r.font.size.pt for p_ in sh.text_frame.paragraphs
+                     for r in p_.runs if r.font.size]
+    # 표 칸은 본래 본문보다 작다(8pt 대도 정상) — 꼬리말 문턱을 적용하면 통째로 걸러진다.
+    if tbl:
+        return round(max(v for v in tbl if v <= 24), 1)
+    txt_ = [v for v in txt_ if 9.6 <= v <= 24]    # 꼬리말(9.5)과 표지 큰 글자 제외
+    return round(max(txt_), 1) if txt_ else None
+
+
+def type_font_uniform(prs):
+    """같은 유형의 슬라이드끼리 본문 크기가 흩어졌는지 (L-47)."""
+    from collections import defaultdict
+    by = defaultdict(list)
+    for i, s in enumerate(prs.slides, 1):
+        pt = _body_pt(s)
+        if pt is not None:
+            by[_slide_kind(s)].append((i, pt))
+    hits = []
+    for kind, rows in by.items():
+        sizes = sorted({pt for _, pt in rows})
+        if len(sizes) > 1:
+            hits.append((kind, len(rows), sizes))
+    return hits
+
+
 def question_titles(prs):
     """슬라이드 제목이 의문형인지 (L-46). 제목은 이름이어야 목차에서 찾을 수 있다."""
     hits = []
@@ -709,6 +758,7 @@ def main(path):
     prose = prose_in_diagram(prs)
     tcall = table_callout(prs)
     qt = question_titles(prs)
+    tfu = type_font_uniform(prs)
     seqs = seq_order(prs)
     dots = no_middot(prs)
 
@@ -733,6 +783,8 @@ def main(path):
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
     rep("도해 글자가 도형 테두리에 붙음 (L-40, 가로 틈 <0.06in, 세로 <0.02in)", touch, lambda x: f"p{x[0]:3d}  틈 {x[2]}in  '{x[1]}'")
+    rep("같은 유형인데 글자 크기가 제각각 (L-47)", tfu,
+        lambda x: f"{x[0]} {x[1]}장 → {x[2]}pt")
     rep("제목이 의문형 (L-46)", qt, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("표 아래 '핵심' 콜아웃 (L-42)", tcall, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해에 긴 문장이 여럿 — 표로 옮겨라 (L-41)", prose,
@@ -753,7 +805,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(prose) + len(tcall) + len(qt) + len(seqs) + len(dots)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(prose) + len(tcall) + len(qt) + len(tfu) + len(seqs) + len(dots)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
