@@ -538,6 +538,24 @@ def covered_arrows(prs, frac=0.25):
     return hits
 
 
+_Q_START = re.compile(r"^(무엇|어떻게|어떤|왜|얼마나|언제|누가|어디)")
+_Q_END = re.compile(r"(했나|하나요|인가|일까|을까|를까|는가|은가|였나|나요)\??$")
+
+
+def question_titles(prs):
+    """슬라이드 제목이 의문형인지 (L-46). 제목은 이름이어야 목차에서 찾을 수 있다."""
+    hits = []
+    for i, s in enumerate(prs.slides, 1):
+        cands = [b for b in boxes(s)
+                 if not b["in_group"] and b["txt"] and "\n" not in b["txt"] and b["t"] < EMU_IN]
+        if not cands:
+            continue
+        t = min(cands, key=lambda b: b["t"])["txt"].strip()
+        if _Q_START.match(t) or _Q_END.search(t):
+            hits.append((i, t[:44]))
+    return hits
+
+
 def table_callout(prs):
     """표 슬라이드에 '핵심' 콜아웃이 붙어 있는지 (L-42).
 
@@ -690,6 +708,7 @@ def main(path):
     slack = box_slack(prs)
     prose = prose_in_diagram(prs)
     tcall = table_callout(prs)
+    qt = question_titles(prs)
     seqs = seq_order(prs)
     dots = no_middot(prs)
 
@@ -714,6 +733,7 @@ def main(path):
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
     rep("도해 글자가 도형 테두리에 붙음 (L-40, 가로 틈 <0.06in, 세로 <0.02in)", touch, lambda x: f"p{x[0]:3d}  틈 {x[2]}in  '{x[1]}'")
+    rep("제목이 의문형 (L-46)", qt, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("표 아래 '핵심' 콜아웃 (L-42)", tcall, lambda x: f"p{x[0]:3d}  '{x[1]}'")
     rep("도해에 긴 문장이 여럿 — 표로 옮겨라 (L-41)", prose,
         lambda x: f"p{x[0]:3d}  {x[1]}줄  '{x[2]}'")
@@ -733,7 +753,7 @@ def main(path):
         lambda x: f"p{x[0]:3d} 글자도형 {x[1]} · 비글자 {x[2]} · 장문비율 {x[3]:.0%} — 구조를 그림으로 (L-24)")
     # text_heavy 는 경고다 — 실패 사유로 세지 않는다. 기존 덱을 일괄 실패시키지 않으면서
     # 새 덱을 만들 때 눈에 띄게 하는 것이 목적이다. 걸리면 그림으로 다시 그릴지 판단하라(L-24).
-    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(prose) + len(tcall) + len(seqs) + len(dots)
+    bad = len(outside) + len(over_h) + len(over_w) + len(collide) + len(dups) + len(dashes) + (1 if summ else 0) + len(gaps) + len(bad_pt) + len(scale_bad) + len(hd_svg) + len(hd_pt) + len(hd_dup) + len(hues) + len(lfit) + len(clash) + len(cov) + len(touch) + len(slack) + len(prose) + len(tcall) + len(qt) + len(seqs) + len(dots)
     print(f"\n{'✅ 레이아웃 문제 없음' if bad == 0 else f'총 {bad}건 확인 필요'}")
     return 1 if bad else 0
 
