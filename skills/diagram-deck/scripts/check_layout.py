@@ -558,7 +558,7 @@ def _slide_kind(s):
 
 def _body_pt(s):
     """그 슬라이드의 본문 글자 크기. 제목(위 1in)·꼬리말·부 표지 큰 글자는 뺀다."""
-    tbl, txt_ = [], []
+    tbl, code, txt_ = [], [], []
     for sh in s.shapes:
         if sh.has_table:
             for row in sh.table.rows:
@@ -566,11 +566,16 @@ def _body_pt(s):
                     tbl += [r.font.size.pt for p_ in c.text_frame.paragraphs
                             for r in p_.runs if r.font.size]
         elif sh.has_text_frame and (sh.top or 0) > EMU_IN:
-            txt_ += [r.font.size.pt for p_ in sh.text_frame.paragraphs
-                     for r in p_.runs if r.font.size]
-    # 표 칸은 본래 본문보다 작다(8pt 대도 정상) — 꼬리말 문턱을 적용하면 통째로 걸러진다.
+            for p_ in sh.text_frame.paragraphs:
+                for r in p_.runs:
+                    if r.font.size:
+                        (code if r.font.name == "Consolas" else txt_).append(r.font.size.pt)
+    # 표 칸과 코드는 본래 본문보다 작다(표 8pt, 코드 7.5pt 대도 정상). 꼬리말 문턱(9.6)을
+    # 적용하면 통째로 걸러져 흩어진 덱이 "통일됨" 으로 보고된다 — 코드 7.5/12/9pt 를 놓쳤다.
     if tbl:
         return round(max(v for v in tbl if v <= 24), 1)
+    if code:
+        return round(max(v for v in code if v <= 24), 1)
     txt_ = [v for v in txt_ if 9.6 <= v <= 24]    # 꼬리말(9.5)과 표지 큰 글자 제외
     return round(max(txt_), 1) if txt_ else None
 
