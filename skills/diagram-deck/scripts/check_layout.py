@@ -691,6 +691,21 @@ def box_slack(prs, min_slack=int(0.7 * 914400)):
 
 
 
+def dup_group_names(prs):
+    """도해 그룹 이름이 장끼리 겹치는지 (L-53).
+
+    deck.py 는 도해 그룹을 전부 "도해" 로 이름 짓는다. 조립기가 `srcs[shp.name] = svg` 로
+    원본 SVG 를 모아 두면 뒤 그림이 앞 그림을 덮어써서, 되돌려 비교가 엉뚱한 짝끼리 맞대진다
+    (실측: 6장 중 2장이 100%, 2장이 9%대로 '실패'했는데 그림은 멀쩡했다)."""
+    from collections import defaultdict
+    seen = defaultdict(list)
+    for i, s in enumerate(prs.slides, 1):
+        for sh in s.shapes:
+            if sh.shape_type == 6:
+                seen[sh.name].append(i)
+    return [(n, ps) for n, ps in seen.items() if len(ps) > 1]
+
+
 def no_middot(prs):
     """PPT 안 모든 글에서 가운뎃점 금지 (L-37).
 
@@ -766,6 +781,7 @@ def main(path):
     tfu = type_font_uniform(prs)
     seqs = seq_order(prs)
     dots = no_middot(prs)
+    dupg = dup_group_names(prs)
 
     def rep(name, items, fmt):
         print(f"\n{'✅' if not items else '⚠️ '} {name}: {len(items)}건")
@@ -786,6 +802,8 @@ def main(path):
         lambda x: f"p{x[0]:3d} {x[4]:.0%} {x[1]}  '{x[2]}' ↔ 도해 '{x[3]}'")
     rep("도해 라벨이 상자를 넘거나 꽉 참 (L-33)", lfit, lambda x: f"p{x[0]:3d}  {x[1]} 여유 {x[2]}in  '{x[3]}'")
     rep("도해 글자가 이웃 도형을 침범 (L-33)", clash, lambda x: f"p{x[0]:3d}  겹침 {x[2]}×{x[3]}in  '{x[1]}'")
+    rep("도해 그룹 이름이 장끼리 겹침 (L-53)", dupg,
+        lambda x: f"'{x[0]}' 이 {len(x[1])}장에 있음 (p" + ", p".join(str(i) for i in x[1]) + ")")
     rep("화살표·화살촉이 나중 도형에 덮임 (L-35)", cov, lambda x: f"p{x[0]:3d}  {x[1]:.0%} 덮임 @({x[2]},{x[3]})in")
     rep("도해 글자가 도형 테두리에 붙음 (L-40, 가로 틈 <0.06in, 세로 <0.02in)", touch, lambda x: f"p{x[0]:3d}  틈 {x[2]}in  '{x[1]}'")
     rep("같은 유형인데 글자 크기가 제각각 (L-47)", tfu,
