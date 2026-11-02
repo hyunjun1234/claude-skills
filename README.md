@@ -6,6 +6,22 @@ Claude Code 스킬 모음. 한 곳에서 관리하고 여러 기계에 심볼릭
 |---|---|
 | [`diagram-deck`](skills/diagram-deck/) | SVG 로 도해를 그려 **PowerPoint 네이티브 도형**으로 슬라이드에 넣는다(상자·화살표·글자를 그대로 편집 가능). 문서 변환은 **`HTML → PPTX`** 와 **`PDF → PPTX`** 두 갈래(중간 PDF 파일 없음). 검증 루프 포함 |
 | [`diagram-deck-upgrade`](skills/diagram-deck-upgrade/) | 그림 수정 요청을 받으면 고치고, **그 교훈을 `diagram-deck` 에 영구히 반영**한다 |
+| [`sota-deck`](skills/sota-deck/) | 문서, PDF, 강의 자료, 코드를 읽고 **SOTA 랩 템플릿**으로 발표자료를 만든다. 구조도, 표, 코드는 네이티브 개체이고 슬라이드마다 짧은 발표자 메모가 붙는다. `check_deck.py` 로 검수 |
+
+## SOTA 템플릿 덱
+
+템플릿은 저장소에 없다(공개 저장소, 학교 로고 포함). 처음 한 번 `assets/` 에 넣는다. 이 자리는 `.gitignore` 에 있다.
+
+```bash
+cp <템플릿 폴더>/SOTA_ppt_template_v5.pptx ~/claude-skills/skills/sota-deck/assets/
+S=~/claude-skills/skills/sota-deck/scripts
+python3 $S/example_deck.py /tmp/sota/example.pptx              # 슬라이드 유형 견본 10장
+python3 $S/check_deck.py /tmp/sota/example.pptx                # 규칙 검수, 통과하면 0 으로 끝난다
+python3 $S/render.py /tmp/sota/example.pptx /tmp/sota/render   # LibreOffice 로 렌더해 두 장씩 대지
+```
+
+교훈은 `diagram-deck/LESSONS.md` 에 함께 쌓고(훅이 그 파일을 지킨다), `sota-deck/scripts/lessons.py` 가 템플릿 덱에
+걸리는 항목만 뽑아 보여 준다.
 
 ## 도해는 그림 파일이 아니라 도형으로 들어간다
 
