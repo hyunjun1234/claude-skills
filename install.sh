@@ -98,7 +98,8 @@ bash "$REPO/skills/diagram-deck/scripts/setup_env.sh" || true
 echo
 echo "설치 완료 ($MODE)."
 if [ "$MODE" = "personal" ]; then
-  echo "  Claude Code 를 새로 켜면 /diagram-deck, /diagram-deck-upgrade 가 잡힌다."
+  echo "  Claude Code 를 새로 켜면 /diagram-deck, /diagram-deck-upgrade, /sota-deck 이 잡힌다."
+  echo "  sota-deck 은 SOTA 템플릿을 $REPO/skills/sota-deck/assets/ 에 넣어야 한다 (git 에는 안 올라간다)."
   echo "  (스킬 디렉터리가 없던 상태에서 새로 만든 경우에만 재시작이 필요하다)"
   echo "  훅을 끄려면: touch $REPO/.no-autosync (자동 푸시만) 또는 /hooks 에서 해제"
 else

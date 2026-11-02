@@ -1,6 +1,6 @@
 {
   "name": "doc-studio",
-  "description": "SVG 도해를 PPTX 네이티브 도형으로 삽입하고, HTML과 PDF를 PPTX로 변환하며, md 문서 작성 규칙을 적용한다",
+  "description": "SVG 도해를 PPTX 네이티브 도형으로 삽입하고, HTML과 PDF를 PPTX로 변환하며, SOTA 랩 템플릿으로 발표자료를 만들고, md 문서 작성 규칙을 적용한다",
   "author": { "name": "hyunjun1234" },
   "skills": "./skills"
 }

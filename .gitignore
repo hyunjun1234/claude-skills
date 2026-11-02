@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 *.egg-info/
+
+# 랩 템플릿은 공개 저장소에 올리지 않는다 (sota-deck)
+skills/sota-deck/assets/*.pptx
+skills/sota-deck/assets/*.potx
