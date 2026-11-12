@@ -46,6 +46,15 @@ bash ~/claude-skills/install.sh
 `install.sh` 는 `~/.claude/skills/<이름>` 을 이 저장소로 **심볼릭 링크**한다.
 Claude Code 는 심볼릭 링크를 따라가므로, 앞으로 `git pull` 만 하면 모든 프로젝트에 반영된다.
 
+## AI 티 없애기 규칙
+
+`rules/no-ai-tone.md` 는 글을 쓸 때 지킬 규칙이다. 가운뎃점, 줄표, 목록 점, 괄호 남발, 상투어, TMI 를 막는다.
+
+- 개인 설치: `install.sh` 가 `~/.claude/no-ai-tone.md` 로 연결하고 `~/.claude/CLAUDE.md` 에 `@~/.claude/no-ai-tone.md` 를 넣는다. 그 기계의 모든 세션과 하위 에이전트가 읽는다.
+- 프로젝트 설치: `--project` 로 돌리면 그 저장소의 `.claude/no-ai-tone.md` 와 `CLAUDE.md` 에 넣는다. 그 저장소를 쓰는 클라우드 세션이 읽는다.
+- claude.ai 채팅: 이 파일 내용을 설정의 개인 선호에 붙여 넣는다. 자동으로 따라가지 않는다.
+- 새 AI 티가 나오면 이 파일에 한 줄 더하고 `git pull` 로 기계마다 받는다.
+
 ## 갱신
 
 ```bash

@@ -48,6 +48,28 @@ done
 
 chmod +x "$REPO"/hooks/*.sh 2>/dev/null || true
 
+# AI 티 없애기 규칙: 모든 세션이 읽도록 CLAUDE.md 에서 불러온다
+RULE_SRC="$REPO/rules/no-ai-tone.md"
+if [ -f "$RULE_SRC" ]; then
+  if [ "$MODE" = "personal" ]; then
+    RULE_DST="$HOME/.claude/no-ai-tone.md"; MEMO="$HOME/.claude/CLAUDE.md"; IMPORT="@~/.claude/no-ai-tone.md"
+    if [ -e "$RULE_DST" ] && [ ! -L "$RULE_DST" ]; then
+      bak="$RULE_DST.bak.$(date +%Y%m%d%H%M%S)"
+      mv "$RULE_DST" "$bak" && echo "기존 규칙 파일을 옮겼다: $bak"
+    fi
+    tmp="$HOME/.claude/.tmp-no-ai-tone.$$"
+    ln -sfn "$RULE_SRC" "$tmp"
+    mv -T "$tmp" "$RULE_DST" 2>/dev/null || { rm -f "$tmp"; ln -sfn "$RULE_SRC" "$RULE_DST"; }
+  else
+    mkdir -p "$TARGET_REPO/.claude"
+    RULE_DST="$TARGET_REPO/.claude/no-ai-tone.md"; MEMO="$TARGET_REPO/CLAUDE.md"; IMPORT="@.claude/no-ai-tone.md"
+    cp "$RULE_SRC" "$RULE_DST"
+  fi
+  touch "$MEMO"
+  grep -qxF "$IMPORT" "$MEMO" || printf '\n%s\n' "$IMPORT" >> "$MEMO"
+  echo "규칙: $RULE_DST 를 $MEMO 에서 불러온다"
+fi
+
 # ── 자동 업그레이드 훅 등록 (개인 설치일 때만) ─────────────────────────────
 # 스킬을 "부르면 도는" 것에서 "안 부르면 하니스가 부르는" 것으로 바꾼다.
 if [ "$MODE" = "personal" ] && [ "${NO_HOOKS:-0}" != "1" ]; then
@@ -103,6 +125,6 @@ if [ "$MODE" = "personal" ]; then
   echo "  (스킬 디렉터리가 없던 상태에서 새로 만든 경우에만 재시작이 필요하다)"
   echo "  훅을 끄려면: touch $REPO/.no-autosync (자동 푸시만) 또는 /hooks 에서 해제"
 else
-  echo "  $TARGET_REPO 에서 git add .claude/skills && commit 하면 클라우드 세션에서도 쓰인다."
+  echo "  $TARGET_REPO 에서 git add .claude/skills .claude/no-ai-tone.md CLAUDE.md && commit 하면 클라우드 세션에서도 쓰인다."
   echo "  (훅은 개인 설치에서만 등록된다. NO_HOOKS=1 로 끌 수 있다)"
 fi
